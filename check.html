@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Air Watch — two-minute check</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@600;700&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="assets/aw.css">
+</head>
+<body>
+<div id="bar"><span id="mark">TOS</span><div id="barTitle">Air Watch · two-minute check</div></div>
+<main id="shell">
+  <div class="card"><div class="eyebrow">Open this on the same link you give the students</div>
+  <h2 style="font-size:22px">Is everything ready?</h2>
+  <p class="vn">Every red row tells you exactly what to fix. Run it again on the school Wi-Fi before the lesson.</p>
+  <div id="rows"></div>
+  <div class="btns"><button class="btn" id="again">Run again</button></div></div>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script src="assets/aw-config.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/aw-waqi.js"></script>
+<script src="assets/aw-sync.js"></script>
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+  function add(state, title, detail){
+    const d = document.createElement("div"); d.className = "checkrow";
+    d.innerHTML = '<span class="s ' + state + '"></span><div><b>' + title + '</b><small>' + detail + '</small></div>';
+    $("#rows").appendChild(d); return d;
+  }
+  async function run(){
+    $("#rows").innerHTML = "";
+    const C = window.AW || {};
+    add(C.build ? "ok" : "bad", "Lesson files: build " + esc(C.build || "missing"), C.build ? "aw-config.js loaded." : "assets/aw-config.js did not load — upload the whole assets folder.");
+    add(location.protocol.startsWith("http") ? "ok" : "warn", location.protocol.startsWith("http") ? "Opened from the web" : "Opened as a local file", location.protocol.startsWith("http") ? esc(location.origin) : "Upload to GitHub Pages and open the web link — local files cannot sync.");
+    const cfg = window.FIREBASE_CONFIG || {};
+    add(cfg.databaseURL ? "ok" : "bad", cfg.databaseURL ? "Firebase settings found" : "Firebase settings missing", cfg.databaseURL ? esc(cfg.databaseURL) : "Copy assets/firebase-config.js from the Materials Bench folder into this folder's assets.");
+    add(typeof firebase !== "undefined" ? "ok" : "bad", typeof firebase !== "undefined" ? "Firebase library loaded" : "Firebase library blocked", typeof firebase !== "undefined" ? "gstatic.com is reachable." : "This network blocks www.gstatic.com. Try another network or ask IT.");
+    const fbRow = add("warn", "Database: writing and reading back…", "Room " + esc(window.AWSYNC ? AWSYNC.room : "?"));
+    try { await AWSYNC.selfTest(); fbRow.querySelector(".s").className = "s ok"; fbRow.querySelector("b").textContent = "Database: write and read back OK"; }
+    catch(e){ fbRow.querySelector(".s").className = "s bad"; fbRow.querySelector("b").textContent = "Database: not working"; fbRow.querySelector("small").textContent = (e && e.message ? e.message : e) + " — check the Realtime Database rules (README step 2)."; }
+    const wq = add("warn", "Air quality data: loading Hanoi stations…", "Token " + (C.waqiToken ? "found" : "missing"));
+    try {
+      const list = await WAQI.stations();
+      const live = list.filter(s => s.aqi !== null && (s.ageH === null || s.ageH <= 6));
+      wq.querySelector(".s").className = "s " + (live.length ? "ok" : "warn");
+      wq.querySelector("b").textContent = "Air quality data: " + list.length + " stations, " + live.length + " updating now";
+      wq.querySelector("small").textContent = live.slice(0, 6).map(s => s.name + " (" + s.aqi + ")").join(" · ");
+    } catch(e){
+      wq.querySelector(".s").className = "s bad"; wq.querySelector("b").textContent = "Air quality data: not reachable";
+      wq.querySelector("small").textContent = (e && e.message ? e.message : e) + " — check the token in assets/aw-config.js, or whether this network blocks api.waqi.info. Students can still type their station name by hand.";
+    }
+    /* the lesson room (30 September) */
+    const LR = "rooms/" + (C.lessonRoom || "G6W6");
+    const lr = add("warn", "Lesson room: writing and reading back…", "Room " + esc(C.lessonRoom || "G6W6"));
+    try {
+      if (typeof firebase === "undefined" || !firebase.apps.length) throw new Error("the database did not start");
+      const stamp = Date.now(), ref = firebase.database().ref(LR + "/_check");
+      await ref.set({ at: stamp });
+      const v = (await ref.once("value")).val();
+      if (!v || v.at !== stamp) throw new Error("wrote but could not read back");
+      lr.querySelector(".s").className = "s ok"; lr.querySelector("b").textContent = "Lesson room: write and read back OK";
+      const st = (await firebase.database().ref(LR + "/state").once("value")).val() || {};
+      const ss = add(st.reset && st.live !== false ? "ok" : "warn",
+        !st.reset ? "No lesson session yet" : st.live === false ? "Last lesson session has ended" : st.startedAt ? "Lesson running — screen " + (st.screen || 1) : "Session ready — waiting for the bell",
+        !st.reset ? "On the day: open teacher.html → PIN → Start a new session, before the students arrive." : st.live === false ? "Start a new session on teacher.html (it clears the old answers)." : "Students can join now.");
+    } catch (e) {
+      lr.querySelector(".s").className = "s bad"; lr.querySelector("b").textContent = "Lesson room: not working";
+      lr.querySelector("small").textContent = (e && e.message ? e.message : e) + " — check the Realtime Database rules (README step 2).";
+    }
+    const base = location.href.replace(/check\.html.*$/, "");
+    add("ok", "Lesson pages", '<a href="' + base + 'index.html">index.html</a> (student laptops) · <a href="' + base + 'teacher.html">teacher.html</a> (you, PIN) · <a href="' + base + 'projector.html">projector.html</a> · <a href="' + base + 'observer.html">observer.html</a> (read-only)');
+    AWSYNC.watchConfig(c => {
+      const old = document.getElementById("csRow"); if (old) old.remove();
+      const r = add(c && c.classStation ? "ok" : "warn", c && c.classStation ? "Class station: " + esc(c.classStation.name) : "No class station chosen yet", c && c.classStation ? "Shown to every student as step 3." : "Choose one on the teacher page (optional, recommended).");
+      r.id = "csRow";
+    });
+  }
+  $("#again").onclick = run; run();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+/* Air Watch — teacher view of the 7-day homework log. */
+(function () {
+  "use strict";
+  const C = window.AW, CAT = window.AW_CAT, CATS = window.AW_CATS, PARTS = window.AW_PARTS;
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+  function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
+  const SKY = { clear: "Clear", hazy: "Hazy", foggy: "Foggy", rainy: "Rainy", dark: "Dark" };
+  const WHAT = { rain: "Rain", wind: "Strong wind", sun: "Hot and sunny", traffic: "Heavy traffic", build: "Construction", smoke: "Smoke / burning smell", incense: "Incense / cooking smoke", weekend: "Weekend / holiday", none: "Nothing special" };
+  const partName = k => k === "notshown" ? "can't tell" : ((PARTS.find(p => p.k === k) || {}).en || "?");
+  const catName = k => ((CATS.find(c => c.k === k) || {}).en || "?");
+
+  let STUDENTS = {}, CFG = {}, FLAGS = {}, SELECTED = null;
+
+  /* ───────── PIN ───────── */
+  function gate() {
+    const app = $("#app");
+    let okd = false; try { okd = sessionStorage.getItem("aw_t") === "1"; } catch (e) {}
+    if (okd) return start();
+    app.innerHTML = '<div class="card" style="max-width:420px;margin:40px auto"><div class="eyebrow">Teacher only</div><h2 style="font-size:22px">Enter your PIN</h2>' +
+      '<label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="off"><div class="err" id="pe"></div>' +
+      '<div class="btns"><button class="btn" id="pb">Open</button></div></div>';
+    const go = () => {
+      if ($("#pin").value.trim() === String(C.teacherPin)) { try { sessionStorage.setItem("aw_t", "1"); } catch (e) {} start(); }
+      else $("#pe").textContent = "That PIN is not right.";
+    };
+    $("#pb").onclick = go; $("#pin").onkeydown = e => { if (e.key === "Enter") go(); };
+    $("#pin").focus();
+  }
+
+  /* ───────── layout ───────── */
+  function start() {
+    const app = $("#app");
+    const base = location.href.replace(/[^/]*$/, "");
+    app.innerHTML =
+      '<div class="card"><div class="eyebrow">Before you send the link</div>' +
+      '<div id="ready"></div>' +
+      '<label>Student link (send this)</label><div class="row2"><input id="stuLink" readonly value="' + esc(base + "homework.html") + '"><div><button class="btn sm" id="copyLink">Copy link</button> <a class="btn sm ghost" href="check.html" target="_blank">Open the check page</a></div></div></div>' +
+
+      '<div class="card"><div class="eyebrow">Class station — everyone also checks this one</div><div id="csNow"></div>' +
+      '<div class="btns" style="margin-top:8px"><button class="btn sm" id="loadSt">Load live Hanoi stations</button></div><div id="stMsg" class="vn"></div><div id="stList"></div></div>' +
+
+      '<div class="card"><div class="eyebrow">Progress</div><div id="prog"></div></div>' +
+      '<div class="card"><div class="eyebrow">Every student · tap a row for the full week</div><div class="tblwrap" id="tbl"></div>' +
+      '<div class="btns"><button class="btn sm" id="csv">Download all answers (CSV)</button><button class="btn sm ghost" id="json">Download a backup (JSON)</button><button class="btn sm ghost" id="clearAll">Clear the whole homework room…</button></div></div>' +
+      '<div class="card" id="detail" hidden></div>' +
+      '<div class="card"><div class="eyebrow">Sky photos · star the ones to use in class</div><p class="vn">Photos load only when you ask, to keep this page fast.</p><div class="btns" style="margin-top:0"><button class="btn sm" id="loadPh">Load all photos</button></div><div id="phWall" style="margin-top:10px"></div></div>';
+
+    $("#copyLink").onclick = () => { const i = $("#stuLink"); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand && document.execCommand("copy"); } $("#copyLink").textContent = "Copied"; };
+    $("#loadSt").onclick = loadStations;
+    $("#csv").onclick = downloadCSV;
+    $("#json").onclick = () => download("air-watch-backup.json", JSON.stringify(STUDENTS, null, 1), "application/json");
+    $("#loadPh").onclick = loadPhotos;
+    const ca = $("#clearAll");
+    ca.onclick = () => {
+      const step = +(ca.dataset.step || 0);
+      if (step === 0) { ca.dataset.step = "1"; ca.textContent = "Download the CSV first. Then tap again."; return; }
+      if (step === 1) { ca.dataset.step = "2"; ca.textContent = "Last chance: tap again to delete every student's week and photos."; return; }
+      AWSYNC.clearAll().then(ok => { ca.dataset.step = "0"; ca.textContent = ok ? "Cleared" : "Could not clear"; });
+    };
+
+    AWSYNC.watchConfig(c => { CFG = c || {}; paintReady(); paintCS(); });
+    AWSYNC.watchPhotoFlags(f => { FLAGS = f || {}; paintStars(); });
+    AWSYNC.watchStudents(v => { STUDENTS = v || {}; paintReady(); paintProgress(); paintTable(); if (SELECTED) paintDetail(SELECTED); });
+    paintReady();
+  }
+
+  function paintReady() {
+    const r = $("#ready"); if (!r) return;
+    const fb = AWSYNC.available();
+    const cs = CFG.classStation;
+    r.innerHTML =
+      row(fb ? "ok" : "bad", fb ? "Firebase connected" : "Firebase not connected", fb ? "Student work arrives here live (room " + esc(AWSYNC.room) + ")." : "Check assets/firebase-config.js and the database rules — see the README.") +
+      row(cs ? "ok" : "warn", cs ? "Class station: " + esc(cs.name) : "No class station yet", cs ? "Every student also records this station, so the class can compare TIME at one place." : "Choose one below before you send the link (recommended).") +
+      row("ok", "Week: " + esc(C.day1) + " → Day " + C.days, "Lesson: " + esc(C.lessonLabel) + ". Students: " + Object.keys(STUDENTS).length + ".");
+  }
+  function row(s, b, small) { return '<div class="checkrow"><span class="s ' + s + '"></span><div><b>' + b + '</b><small>' + small + '</small></div></div>'; }
+
+  /* ───────── class station ───────── */
+  function paintCS() {
+    const n = $("#csNow"); if (!n) return;
+    const cs = CFG.classStation;
+    n.innerHTML = cs ? '<div class="ok">Now: <b>' + esc(cs.name) + '</b>' + (cs.parts ? ' · shows ' + esc(cs.parts.join(", ")) : '') + (cs.url ? ' · <a href="' + esc(cs.url) + '" target="_blank" rel="noopener">open</a>' : '') + '</div>'
+      : '<div class="note">Pick a station that updates every hour and shows several of the six parts. It will appear on every student\'s page as step 3.</div>';
+  }
+  function loadStations() {
+    const m = $("#stMsg"); m.textContent = "Loading…";
+    WAQI.stations().then(all => {
+      const list = all.filter(s => s.ageH === null || s.ageH <= 72).sort((a, b) => ((a.aqi === null) - (b.aqi === null)) || a.name.localeCompare(b.name));
+      m.textContent = list.length + " stations in the Hanoi area are updating. Check the parts before choosing.";
+      const L = $("#stList"); L.innerHTML = "";
+      const t = el("table", "tbl");
+      t.innerHTML = "<thead><tr><th>Station</th><th>AQI now</th><th>Updated</th><th>Parts</th><th></th></tr></thead>";
+      const tb = el("tbody");
+      list.forEach(s => {
+        const c = CAT(s.aqi);
+        const tr = el("tr");
+        tr.innerHTML = '<td>' + esc(s.name) + '</td><td>' + (c ? '<span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + s.aqi + '</span>' : '–') + '</td>' +
+          '<td>' + (s.ageH === null ? "?" : s.ageH <= 1 ? "this hour" : s.ageH + " h ago") + '</td><td class="pp"><button class="btn sm ghost">check</button></td><td><button class="btn sm">Use</button></td>';
+        const [chk, use] = tr.querySelectorAll("button");
+        chk.onclick = () => { chk.textContent = "…"; WAQI.feed(s.uid).then(f => { tr.querySelector(".pp").textContent = f.nParts + " of 6: " + PARTS.filter(p => f.parts[p.k] !== null).map(p => p.en).join(", "); }).catch(() => { chk.textContent = "failed"; }); };
+        use.onclick = () => {
+          use.textContent = "…";
+          WAQI.feed(s.uid).then(f => f).catch(() => null).then(f => {
+            const val = { uid: s.uid, name: s.name, url: (f && f.url) || WAQI.link(s.uid), parts: f ? PARTS.filter(p => f.parts[p.k] !== null).map(p => p.en) : null, at: Date.now() };
+            AWSYNC.setConfig("classStation", val).then(ok => { use.textContent = ok ? "✓ chosen" : "failed"; });
+          });
+        };
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb); const wrap = el("div", "tblwrap"); wrap.appendChild(t); L.appendChild(wrap);
+    }).catch(e => { m.textContent = "Could not load stations (" + (e && e.message ? e.message : e) + "). Check the token on the check page."; });
+  }
+
+  /* ───────── progress + table ───────── */
+  const list = () => Object.keys(STUDENTS).map(code => Object.assign({ code }, STUDENTS[code])).sort((a, b) => String(a.n || "").localeCompare(String(b.n || "")));
+  const daysOf = s => s.days || {};
+  function rightCount(s) {
+    let r = 0, n = 0;
+    Object.values(daysOf(s)).forEach(d => { if (!d || !d.a) return; n++; const c = CAT(d.a.aqi); if (c && d.g && d.g.guess === c.k) r++; });
+    return [r, n];
+  }
+  function paintProgress() {
+    const p = $("#prog"); if (!p) return;
+    const L = list();
+    const per = []; for (let i = 1; i <= C.days; i++) per.push(L.filter(s => daysOf(s)[i]).length);
+    const max = Math.max(1, L.length);
+    let tr = 0, tn = 0; L.forEach(s => { const [r, n] = rightCount(s); tr += r; tn += n; });
+    const photos = L.reduce((a, s) => a + Object.values(daysOf(s)).filter(d => d && d.photo).length, 0);
+    p.innerHTML = '<div class="row3"><div><b style="font-size:26px">' + L.length + '</b><br><span class="vn">students joined</span></div>' +
+      '<div><b style="font-size:26px">' + L.filter(s => s.sub).length + '</b><br><span class="vn">handed in</span></div>' +
+      '<div><b style="font-size:26px">' + (tn ? Math.round(100 * tr / tn) + "%" : "–") + '</b><br><span class="vn">guesses by looking that were right (' + tr + '/' + tn + ') · ' + photos + ' photos</span></div></div>' +
+      '<div class="bars">' + per.map(v => '<div style="height:' + Math.round(100 * v / max) + '%"><span>' + v + '</span></div>').join("") + '</div>' +
+      '<div class="barlab">' + per.map((_, i) => "Day " + (i + 1)).join("</div><div>").replace(/^/, "<div>") + '</div></div>';
+  }
+  function chip(d) {
+    if (!d || !d.a) return '<span class="vn">—</span>';
+    const c = CAT(d.a.aqi);
+    return '<span class="aqi" style="background:' + (c ? c.col : "#ccc") + ';color:' + (c ? c.ink : "#000") + '">' + d.a.aqi + '</span>' + (d.late ? '<span class="late" title="entered late">*</span>' : '');
+  }
+  function paintTable() {
+    const t = $("#tbl"); if (!t) return;
+    const L = list();
+    if (!L.length) { t.innerHTML = '<p class="vn">No students yet. When the first student starts, they appear here within a second or two.</p>'; return; }
+    let h = '<table class="tbl"><thead><tr><th>Name</th><th>Class</th><th>Station</th><th>Time</th>';
+    for (let i = 1; i <= C.days; i++) h += '<th>D' + i + '</th>';
+    h += '<th>Guess right</th><th>Handed in</th></tr></thead><tbody>';
+    L.forEach(s => {
+      const slot = (C.slots.find(x => x.k === s.slot) || {}).en || "";
+      const [r, n] = rightCount(s);
+      h += '<tr class="click" data-code="' + esc(s.code) + '"><td><b>' + esc(s.n) + '</b></td><td>' + esc(s.c) + '</td><td>' + esc(s.st ? s.st.name : "") + '</td><td>' + esc(slot.split(",")[0]) + '</td>';
+      for (let i = 1; i <= C.days; i++) h += '<td>' + chip(daysOf(s)[i]) + '</td>';
+      h += '<td>' + (n ? r + "/" + n : "–") + '</td><td>' + (s.sub ? "✓" : "") + '</td></tr>';
+    });
+    h += '</tbody></table><p class="vn">* entered late (on a different day from the day it describes).</p>';
+    t.innerHTML = h;
+    t.querySelectorAll("tr.click").forEach(tr => tr.onclick = () => { SELECTED = tr.dataset.code; paintDetail(SELECTED); $("#detail").scrollIntoView({ behavior: "smooth", block: "start" }); });
+  }
+
+  /* ───────── one student ───────── */
+  function paintDetail(code) {
+    const s = STUDENTS[code]; const box = $("#detail"); if (!s || !box) return;
+    box.hidden = false;
+    const slot = (C.slots.find(x => x.k === s.slot) || {}).en || "";
+    let h = '<div class="eyebrow">' + esc(s.n) + ' · ' + esc(s.c) + ' · code ' + esc(code) + '</div>' +
+      '<p style="margin:0 0 8px">Station: <b>' + esc(s.st ? s.st.name : "") + '</b> · Time: ' + esc(slot) + (s.area ? ' · Lives in ' + esc(s.area) : '') + '</p>' +
+      '<div class="tblwrap"><table class="tbl"><thead><tr><th>Day</th><th>Sky</th><th>Guess</th><th>AQI</th><th>PM2.5</th><th>Biggest</th><th>Updated</th><th>Class stn</th><th>Happening</th><th>Saved</th><th>Photo</th></tr></thead><tbody>';
+    for (let i = 1; i <= C.days; i++) {
+      const d = daysOf(s)[i];
+      if (!d) { h += '<tr><td>' + i + '</td><td colspan="10" class="vn">not logged</td></tr>'; continue; }
+      const c = CAT(d.a.aqi); const right = c && d.g && d.g.guess === c.k;
+      h += '<tr><td>' + i + '</td><td>' + esc(SKY[d.g.sky] || "") + '</td><td>' + esc(catName(d.g.guess)) + (right ? ' ✓' : ' ✗') + '</td><td>' + chip(d) + '</td>' +
+        '<td>' + (d.a.pm25 === null || d.a.pm25 === undefined ? "–" : d.a.pm25) + '</td><td>' + esc(partName(d.a.big)) + '</td><td>' + esc(d.a.upd || "") + '</td>' +
+        '<td>' + (d.ref ? d.ref.aqi : "–") + '</td><td>' + esc((d.what || []).map(k => WHAT[k] || k).join(", ")) + (d.note ? '<br><i>' + esc(d.note) + '</i>' : '') + '</td>' +
+        '<td>' + new Date(d.at).toLocaleString("en-GB", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (d.late ? ' <span class="late">late</span>' : '') + '</td>' +
+        '<td>' + (d.photo ? '<button class="btn sm ghost" data-ph="' + i + '">show</button>' : '') + '</td></tr>';
+      if (d.six) h += '<tr><td></td><td colspan="10" class="vn">Six parts: ' + PARTS.map(p => esc(p.en) + ' ' + (d.six[p.k] === null ? '–' : d.six[p.k])).join(' · ') + '</td></tr>';
+    }
+    h += '</tbody></table></div>';
+    if (s.refl && (s.refl.why || s.refl.look)) h += '<div class="ok" style="background:var(--soft);color:var(--text)"><b>Look back:</b> worst day ' + esc(s.refl.worst || "?") + ' — “' + esc(s.refl.why || "") + '”<br>“' + esc(s.refl.look || "") + '”</div>';
+    h += '<div id="dPh" class="pgrid" style="margin-top:10px"></div>' +
+      '<div class="btns"><button class="btn sm ghost" id="rm">Remove this student (test entries)</button><button class="btn sm ghost" id="cl">Close</button></div>';
+    box.innerHTML = h;
+    box.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => showPhoto(code, +b.dataset.ph, $("#dPh")));
+    $("#cl").onclick = () => { SELECTED = null; box.hidden = true; };
+    const rm = $("#rm");
+    rm.onclick = () => {
+      if (rm.dataset.arm !== "1") { rm.dataset.arm = "1"; rm.textContent = "Tap again to remove " + (s.n || code); return; }
+      AWSYNC.removeStudent(code).then(() => { SELECTED = null; box.hidden = true; });
+    };
+  }
+
+  /* ───────── photos ───────── */
+  function fig(code, day, data) {
+    const s = STUDENTS[code] || {}; const d = (s.days || {})[day] || {};
+    const c = d.a ? CAT(d.a.aqi) : null; const key = code + "_" + day;
+    const f = el("figure");
+    f.innerHTML = '<img alt="Sky photo, ' + esc(s.n) + ', day ' + day + '" src="' + data + '"><figcaption><span>' + esc(s.n || code) + ' · D' + day + ' · ' +
+      (c ? '<b style="color:' + c.col + '">AQI ' + d.a.aqi + '</b>' : '') + ' · guessed ' + esc(catName(d.g && d.g.guess)) + '</span><button class="star' + (FLAGS[key] === "star" ? " on" : "") + '" data-k="' + key + '" title="Use in class">★</button></figcaption>';
+    const st = f.querySelector(".star");
+    st.onclick = () => { const on = FLAGS[key] === "star"; AWSYNC.setPhotoFlag(code, day, on ? null : "star"); };
+    return f;
+  }
+  function showPhoto(code, day, into) {
+    AWSYNC.getPhoto(code, day).then(p => { if (p && p.d) into.appendChild(fig(code, day, p.d)); });
+  }
+  function loadPhotos() {
+    const wall = $("#phWall"); wall.innerHTML = ""; const g = el("div", "pgrid"); wall.appendChild(g);
+    const jobs = [];
+    list().forEach(s => Object.keys(daysOf(s)).forEach(k => { if (daysOf(s)[k] && daysOf(s)[k].photo) jobs.push([s.code, +k]); }));
+    if (!jobs.length) { wall.innerHTML = '<p class="vn">No photos yet.</p>'; return; }
+    jobs.forEach(([c, d]) => showPhoto(c, d, g));
+  }
+  function paintStars() { document.querySelectorAll(".star").forEach(b => b.classList.toggle("on", FLAGS[b.dataset.k] === "star")); }
+
+  /* ───────── export ───────── */
+  function downloadCSV() {
+    const cols = ["code", "name", "class", "area", "station", "time_slot", "day", "date", "saved_at", "late", "sky", "guess", "aqi", "aqi_band", "guess_right", "pm25", "biggest", "page_updated", "class_aqi", "class_pm25", "happening", "note", "photo",
+      "six_pm25", "six_pm10", "six_o3", "six_no2", "six_so2", "six_co", "handed_in", "worst_day_why", "looking_sentence"];
+    const rows = [cols];
+    list().forEach(s => {
+      for (let i = 1; i <= C.days; i++) {
+        const d = daysOf(s)[i]; if (!d) continue;
+        const c = CAT(d.a.aqi);
+        rows.push([s.code, s.n, s.c, s.area, s.st ? s.st.name : "", s.slot, i, d.date, new Date(d.at).toISOString(), d.late ? "yes" : "no", d.g.sky, d.g.guess, d.a.aqi, c ? c.k : "", c && d.g.guess === c.k ? "yes" : "no",
+          d.a.pm25 == null ? "" : d.a.pm25, d.a.big, d.a.upd || "", d.ref ? d.ref.aqi : "", d.ref && d.ref.pm25 != null ? d.ref.pm25 : "", (d.what || []).join("|"), d.note || "", d.photo ? "yes" : "no",
+          ...(d.six ? PARTS.map(p => d.six[p.k] == null ? "" : d.six[p.k]) : ["", "", "", "", "", ""]),
+          s.sub ? "yes" : "no", s.refl ? s.refl.why || "" : "", s.refl ? s.refl.look || "" : ""]);
+      }
+    });
+    const csv = rows.map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n");
+    download("air-watch-7-days.csv", "﻿" + csv, "text/csv;charset=utf-8");
+  }
+  function download(name, content, type) {
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([content], { type })); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  gate();
+})();

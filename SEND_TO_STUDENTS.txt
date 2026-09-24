@@ -5,7 +5,7 @@ Every day until Tuesday 29 September, at the SAME time each day:
 2. Check your station on aqicn.org and type the numbers.
 3. Tick what was happening (rain, traffic, smoke…).
 
-Log it here: [PASTE YOUR LINK]
+Log it here: https://vintiz-dot.github.io/g6-air-watch/homework
 
 It takes about 3 minutes a day. Also write your PM2.5 number in your book, page 34.
 If you already checked the air today (23 September), add it as Day 1.

@@ -13,7 +13,7 @@ window.AW = {
   stations: 11,
 
   /* Teacher pages ask for this PIN. Change it to any 4–6 digits. */
-  teacherPin: "4826",
+  teacherPin: "2307",
 
   /* World Air Quality Index Project token (aqicn.org/data-platform/token).
      Like the Firebase keys, it is visible in the page code — that is normal. */

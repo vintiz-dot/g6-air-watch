@@ -13,22 +13,6 @@
   const S = (p, n) => (p && p.a && p.a["s" + n]) || {};
   const pl = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
 
-  /* Level-4 descriptors, Teacher Competences Framework (school document, Part 2–3) */
-  const L4 = {
-    "3A.1": "At least 80% of students are able to independently recall and assess the achievement of the lesson objectives and their personal learning by the end of the lesson, without teacher guidance or prompts.",
-    "3A.2": "At least 80% students implicitly understand and clearly demonstrate what standards are expected of them during each activity/task.",
-    "3B": "Lesson plan shows an innovative way in technological integration that is worth being replicated and systemized.",
-    "3C.1": "At least 80% students can explain their thinking effectively, using logical reasoning, convincing evidence (in written, spoken forms). · At least 80% students actively communicate and exchange ideas in class, with total speaking time of students exceeding 50% of the class/activity length.",
-    "3C.2": "At least 80% students can work independently and effectively in groups with little to no support from teachers (i.e. organizing and assigning tasks to members, managing teamwork, discussing between members).",
-    "3C.3": "Students have opportunities to take justifiable initiatives to adapt the lesson, e.g. (1) modifying a learning task to make it more meaningful and relevant to students' needs, (2) suggesting modifications to the grouping patterns used, (3) suggesting modifications or additions to the materials being used, (4) choosing to complete the task individually, in pairs…",
-    "3D.1": "At least 80% students effectively initiate higher-order questions that are appropriate to their cognitive developmental stage.",
-    "3D.2": "Students ask for and receive effectively constructive feedback on their work from their classmates or teacher in the discussion and initiate questions to push others' thinking.",
-    "3E.1": "At least 80% students actively analyze their progress based on a clear standard set by the teacher to achieve results and identify new opportunities and challenges for the next learning phase.",
-    "3E.2": "At least 80% students are aware of assessment criteria and able to assess themselves. · At least 80% students are able to give constructive feedback to their peers without teacher's support.",
-    "2B.2": "At least 85% students follow classroom procedures and always show appropriate behavior.",
-    "2C.2": "At least 80% students in class are focused and intrinsically driven to complete work of high quality relative to each individual's ability.",
-    "2C.3": "Teacher uses and combines creative teaching tools, techniques, and methods worth expanding, which ignite passion and curiosity for learning, creates a dynamic learning environment, and encourages students to initiate their own projects and learning activities, research, or activities related to the lesson, demonstrating passion and mutual support."
-  };
 
   function pairs(P) {
     return Object.keys(P || {}).map(pid => P[pid] && Object.assign({ pid }, P[pid], { names: arr(P[pid].names).filter(Boolean) }))
@@ -80,7 +64,7 @@
       case 6: items = [arr(a.d1 && a.d1.pick).length === 2, Object.keys((a.d1 && a.d1.role) || {}).length >= 2, a.d2 && a.d2.pick, nFilled(a.tw2) >= 3, a.book]; break;
       case 7: items = [a.frame, a.submitted, a.book].concat(ctx.ruleVote ? [a.vote != null] : []); break;
       case 8: items = [arr(a.q3).length === 3, nFilled(a.fD) >= 1, nFilled(a.fE) >= 1, Object.values(a.plan || {}).filter(x => t(x)).length >= 3, a.reviewed]; break;
-      case 9: items = [a.post, a.goalsShown, a.recall != null, arr(a.rate).filter(r => r && r.lv).length === 3, t(a.exit), a.book]; break;
+      case 9: items = [a.post, a.goalsShown, (a.rec || {}).sci && (a.rec || {}).think, arr(a.rate).filter(r => r && r.lv).length === 3, t(a.exit), a.book]; break;
       default: items = [];
     }
     return { got: items.filter(has).length, of: items.length };
@@ -156,7 +140,10 @@
       }
       case 9: {
         if (a.post) out.push("Tell by looking? <b>" + e(label(D.vote.opts, a.post)) + "</b>" + (S(p, 1).pre ? " (was " + e(label(D.vote.opts, S(p, 1).pre)) + ")" : ""));
-        if (a.goalsShown) out.push("goals from memory: " + (a.recall != null ? a.recall + "/3" : "typed"));
+        if (a.goalsShown) {
+          const r = a.rec || {}, w = { got: "got it", partly: "partly", missed: "missed" };
+          out.push("from memory — science goal: " + (w[r.sci] || "…") + keyHint(a.memSci, "sci") + " · thinking goal: " + (w[r.think] || "…") + keyHint(a.memThink, "think"));
+        }
         const r = arr(a.rate).filter(x => x && x.lv);
         if (r.length) out.push("self-rating: " + r.map(x => ({ no: "not yet", almost: "almost", yes: "yes" }[x.lv])).join(", "));
         if (t(a.exit)) out.push(q(a.exit));
@@ -187,6 +174,62 @@
     return { pre, post, moved, both };
   }
 
+  /* ───────── the three goals, measured screen by screen ───────── */
+  const hasDigit = v => /\d/.test(arr(v).join(" "));
+  const noPlace = x => !/ha\s*noi|hà\s*nội/i.test(x || "");
+  const allOf = (vals, need) => { const done = vals.filter(x => x !== null); if (!done.length) return null; return done.length === vals.length && vals.filter(Boolean).length >= need; };
+  const GC = [
+    { id: "s3",  g: "sci",   n: 3, label: "Jar Test: explained with the number, not the look", test: a => nFilled(a.ex) ? (nFilled(a.ex) >= 2 && hasDigit(a.ex)) : null },
+    { id: "s4a", g: "sci",   n: 4, label: "Pollutant or not: 7–8 of 8 cards right", test: a => allOf(D.focus.cards.map(cd => MARK.sort(a, cd)), 7) },
+    { id: "s4b", g: "sci",   n: 4, label: "Book Q2 (p.32): 3–4 of 4 right", test: a => allOf(D.focus.q2.key.map((k, i) => MARK.q2(a, i)), 3) },
+    { id: "s5",  g: "sci",   n: 5, label: "The AQI is the biggest of the six parts", test: MARK.hyp },
+    { id: "s6",  g: "sci",   n: 6, label: "DBQ2 (p.34): A", test: MARK.dbq2 },
+    { id: "l4a", g: "lang",  n: 4, label: "Key words: book Q1 matched 4 of 4", test: a => allOf(D.focus.q1.key.map((k, i) => MARK.q1(a, i)), 4) },
+    { id: "l4b", g: "lang",  n: 4, label: "Grammar: “The AQI tells us…”", test: MARK.map },
+    { id: "l5",  g: "lang",  n: 5, label: "“The AQI shows ___, but it hides ___.”", test: a => nFilled(a.fr) ? nFilled(a.fr) >= 2 : null },
+    { id: "l6",  g: "lang",  n: 6, label: "“___ tells us that the AQI was ___” with a number", test: a => nFilled(a.tw2) > 1 ? (nFilled(a.tw2) >= 3 && hasDigit(arr(a.tw2).slice(1))) : null },
+    { id: "l8",  g: "lang",  n: 8, label: "“If the city did D, it would miss ___” — both sentences", test: a => (nFilled(a.fD) || nFilled(a.fE)) ? (nFilled(a.fD) >= 1 && nFilled(a.fE) >= 1) : null },
+    { id: "t2",  g: "think", n: 2, label: "Asked a question to investigate", test: a => a.qPosted ? true : (t(a.q) ? false : null) },
+    { id: "t5",  g: "think", n: 5, label: "Time or place: decided with evidence", test: a => { const tm = a.time || {}, pl = a.place || {}; if (!tm.yn && !pl.yn) return null; return !!(tm.yn && pl.yn && (t(tm.ev) || t(pl.ev))); } },
+    { id: "t6",  g: "think", n: 6, label: "DBQ1 (p.33): one cause and one effect", test: a => { const x = MARK.dbq1(a); return x === null ? null : (x && MARK.dbq1roles(a) === true); } },
+    { id: "t7",  g: "think", n: 7, label: "A rule for any city (no place name)", test: a => a.submitted ? (!!t(a.rule) && noPlace(a.rule)) : (a.frame ? false : null) },
+    { id: "t8a", g: "think", n: 8, label: "Q3 (p.32): A, B and C", test: MARK.q3 },
+    { id: "t8b", g: "think", n: 8, label: "A fair plan: where, when, how often, compared with what", test: a => { const k = Object.values(a.plan || {}).filter(x => t(x)).length; return k ? k >= 4 : null; } }
+  ];
+  /* key words that suggest a goal was recalled (teacher hint only) */
+  const KW = {
+    sci: ["clear", "clean", "pollut", "aqi", "made of", "pm", "part", "look", "air"],
+    think: ["evidence", "test", "fair", "plan", "measure", "where", "when", "often", "compar", "prove", "number"]
+  };
+  function keyHits(text, k) { const s = String(text || "").toLowerCase(); return (KW[k] || []).filter(w => s.includes(w)).length; }
+  function keyHint(text, k) { return t(text) ? (keyHits(text, k) >= 2 ? " (key words ✓)" : " (few key words)") : ""; }
+  function goals(X) {
+    const L = pairs(X.pairs), N = L.length, ST = X.state || {}, cur = ST.screen || 1, live = ST.live !== false;
+    const opened = new Set();
+    evList(X.events).forEach(e => { if ((e.kind === "screen" || e.kind === "bell") && (!ST.startedAt || e.at >= ST.startedAt - 1000)) opened.add(e.n || 1); });
+    const stateOf = n => !ST.startedAt ? "later" : (n === cur && live) ? "live" : (opened.has(n) || n < cur || (!live && n <= cur)) ? "closed" : "later";
+    return D.goals.map(g => {
+      const checks = GC.filter(c => c.g === g.k).map(c => {
+        const res = L.map(p => c.test(S(p, c.n)));
+        const met = res.filter(r => r === true).length;
+        return { id: c.id, n: c.n, label: c.label, met, tried: res.filter(r => r !== null).length, N, pct: N ? U.pct(met, N) : null, state: stateOf(c.n) };
+      });
+      const closed = checks.filter(c => c.state === "closed" && c.pct !== null);
+      const liveC = checks.filter(c => c.state === "live" && c.pct !== null);
+      const avg = cs => cs.length ? Math.round(cs.reduce((s, c) => s + c.pct, 0) / cs.length) : null;
+      return Object.assign({}, g, { checks, pct: avg(closed), closed: closed.length, livePct: avg(liveC), live: liveC.length });
+    });
+  }
+  /* one pair: checks met so far for each goal */
+  function pairGoals(p, ST) {
+    const cur = (ST && ST.screen) || 1;
+    return D.goals.map(g => {
+      const cs = GC.filter(c => c.g === g.k && c.n <= cur);
+      return { k: g.k, short: g.short, met: cs.filter(c => c.test(S(p, c.n)) === true).length, of: cs.length };
+    });
+  }
+  const goalTone = pct => pct == null ? "later" : pct >= 80 ? "met" : pct >= 60 ? "near" : "low";
+
   /* ───────── the framework panel ───────── */
   function rubric(X) {
     const L = pairs(X.pairs), N = L.length;
@@ -198,13 +241,15 @@
     const rows = [];
 
     /* 3A.1 recall + self-assessment of the goals */
-    const typed = L.filter(p => S(p, 9).goalsShown && t(S(p, 9).goals).length >= 10);
-    const rec2 = typed.filter(p => +S(p, 9).recall >= 2);
+    const recOf = (p, k) => ((S(p, 9).rec || {})[k]) || null;
+    const typed = L.filter(p => S(p, 9).goalsShown);
+    const rec2 = typed.filter(p => recOf(p, "sci") === "got" && recOf(p, "think") === "got");
+    const cntRec = (k, v) => L.filter(p => recOf(p, k) === v).length;
     const rated = L.filter(p => arr(S(p, 9).rate).filter(r => r && r.lv).length === 3);
     const ratedEv = L.filter(p => arr(S(p, 9).rate).filter(r => r && r.lv && r.ev).length === 3);
     const a31 = L.filter(p => rec2.includes(p) && rated.includes(p));
     rows.push({ code: "3A.1", name: "Setting objectives", when: 9, target: 80, pct: pc(a31.length), k: a31.length,
-      detail: "Typed the goals from memory: " + typed.length + " · remembered 2–3 goals: " + rec2.length + " · self-assessed all three: " + rated.length + " of " + N + " pairs." });
+      detail: "From memory — science goal: got it " + cntRec("sci", "got") + ", partly " + cntRec("sci", "partly") + " · thinking goal: got it " + cntRec("think", "got") + ", partly " + cntRec("think", "partly") + " · both goals right and all three self-assessed: " + a31.length + " of " + N + " pairs." });
 
     /* 3A.2 standards shown on each task → pairs finishing each task */
     const done = n => L.filter(p => p.done && p.done[n]).length;
@@ -286,7 +331,7 @@
     rows.push({ code: "2C.3", name: "Curiosity & passion", kind: "evidence",
       detail: hwStudents + " students ran their own 7-day investigation (" + hwReadings + " readings, " + photos + " sky photos) · " + qs.length + " questions of their own, which seed the E12 research reports." });
 
-    rows.forEach(r => { r.l4 = L4[r.code]; r.status = status(r, cur, ST); });
+    rows.forEach(r => { r.status = status(r, cur, ST); });
     return rows;
   }
   function status(r, cur, ST) {
@@ -297,5 +342,5 @@
     return "low";
   }
 
-  window.AWE = { L4, pairs, evList, progress, summary, checks, tally, shift, rubric, MARK, label, frameText, arr };
+  window.AWE = { pairs, evList, progress, summary, checks, tally, shift, rubric, MARK, label, frameText, arr, goalChecks: GC, goals, pairGoals, goalTone, keyHits };
 })();

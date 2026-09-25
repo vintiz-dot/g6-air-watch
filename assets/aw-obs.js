@@ -9,7 +9,6 @@
   const NST = C.stations || 11;
   let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, EVENTS = {}, HOMEWORK = {};
   let connected = null;
-  const openDet = new Set();
   const X = () => ({ state: ST, pairs: PAIRS, questions: QS, sugg: SUGG, feedback: FB, votes: VOTES, events: EVENTS, homework: HOMEWORK, talk: talkPct() });
   const clock = ts => { if (!ts) return ""; const d = new Date(ts); return d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); };
 
@@ -27,7 +26,8 @@
       '<div class="card"><h3 id="lwh">Live work</h3><div class="pairs" id="opairs"></div></div>' +
       '<div class="card"><h3>Student voice <small class="vn">questions · ideas to change a task · peer feedback · spotlights</small></h3><ul class="feed" id="feed"></ul></div>' +
     '</div><div>' +
-      '<div class="card"><h3>Evidence for the Teacher Competences Framework <small class="vn">level 4 · counted live from the pairs’ work · 1 pair = 2 students</small></h3><div id="rub"></div></div>' +
+      '<div class="card"><h3>Goals — measured as the lesson goes <small class="vn">finished screens · % of pairs meeting each check</small></h3><div id="ogoals"></div></div>' +
+      '<div class="card"><h3>Evidence for the Teacher Competences Framework <small class="vn">counted live from the pairs’ work · 1 pair = 2 students</small></h3><div id="rub"></div></div>' +
       '<div class="card"><h3>Checks for understanding <small class="vn">auto-marked · % of pairs right</small></h3><div id="chk"></div></div>' +
       '<div class="card"><h3>Talk-time tally <small class="vn">optional · for your own notes · stays on this laptop</small></h3><div id="talk"></div></div>' +
       '<div class="card"><h3>The lesson in brief</h3><div id="about" class="vn" style="font-size:14px"></div></div>' +
@@ -93,17 +93,28 @@
     const f = $("#feed"); if (f.dataset.h !== h) { f.dataset.h = h; f.innerHTML = h; }
   }
 
+  /* ───────── the three goals, measured screen by screen ───────── */
+  function paintGoals() {
+    const G = E.goals(X());
+    const h = G.map(g => {
+      const tone = E.goalTone(g.pct);
+      return '<div class="goalrow"><div class="gtop"><span><span class="gtag g-' + g.k + '">' + esc(g.label) + '</span> <span class="vn" style="font-size:13px">' + esc(g.text) + '</span></span><span class="gpct">' + (g.pct == null ? "–" : g.pct + "%") + '</span></div>' +
+        '<div class="gbar st-' + tone + '"><i style="width:' + (g.pct || 0) + '%"></i></div>' +
+        g.checks.map(c => '<div class="gck ' + c.state + '"><span class="vn" style="font-size:11px">screen ' + c.n + '</span><span>' + esc(c.label) + (c.state === "live" ? " <i>(now)</i>" : "") + '</span><b>' + (c.state === "later" ? "–" : c.met + " / " + c.N) + '</b></div>').join("") + '</div>';
+    }).join("");
+    const box = $("#ogoals"); if (box.dataset.h !== h) { box.dataset.h = h; box.innerHTML = h; }
+  }
+
   /* ───────── framework evidence ───────── */
-  const stLabel = { met: "at the level-4 target", near: "close to target", low: "below target so far", later: "measured later", evidence: "evidence" };
+  const stLabel = { met: "target met", near: "close to target", low: "below target so far", later: "measured later", evidence: "evidence" };
   function paintRub() {
     const rows = E.rubric(X());
     const h = rows.map(r => '<div class="rub"><div class="top"><span class="code">' + r.code + '</span><span class="nm">' + esc(r.name) + ' <span class="sttag ' + r.status + '">' + stLabel[r.status] + '</span></span><span class="pct">' + (r.kind === "evidence" ? "" : r.pct == null || r.status === "later" ? "–" : r.pct + "%") + '</span></div>' +
       (r.kind === "evidence" ? "" : '<div class="bar st-' + r.status + '"><i style="width:' + (r.status === "later" ? 0 : r.pct || 0) + '%"></i><u style="left:' + r.target + '%"></u></div>') +
       '<div class="det">' + esc(r.detail) + '</div>' +
       (r.list && r.list.length ? '<div class="lst">' + r.list.map(x => '<div>“' + esc(x.text) + '” — ' + (x.status === "yes" ? '<b class="yes">accepted</b>' : x.status === "no" ? "not this time" : "waiting") + '</div>').join("") + '</div>' : '') +
-      '<details data-code="' + r.code + '"' + (openDet.has(r.code) ? " open" : "") + '><summary>Level-4 descriptor</summary>' + esc(r.l4) + '</details></div>').join("");
+      '</div>').join("");
     const box = $("#rub"); if (box.dataset.h === h) return; box.dataset.h = h; box.innerHTML = h;
-    box.querySelectorAll("details").forEach(d => d.addEventListener("toggle", () => { if (d.open) openDet.add(d.dataset.code); else openDet.delete(d.dataset.code); box.dataset.h = ""; }));
   }
   function paintChecks() {
     const rows = E.checks(PAIRS).filter(c => c.n);
@@ -135,7 +146,7 @@
   function paintAbout() {
     const hwN = HW.list(HOMEWORK).filter(s => HW.days(s).length).length, rd = HW.readings(HOMEWORK);
     $("#about").innerHTML = '<p style="margin:0 0 6px"><b>Concept-Based Inquiry:</b> Engage → Focus → Investigate → Generalize → Transfer → Reflect, in 9 timed screens (44 minutes + 1 to close). Pairs share one laptop; Pilot and Navigator swap at every screen.</p>' +
-      '<p style="margin:0 0 6px"><b>Goals shown to students:</b></p><ol style="margin:0 0 6px;padding-left:20px">' + D.criteria.map(c => '<li>' + esc(c) + '</li>').join("") + '</ol>' +
+      '<p style="margin:0 0 6px"><b>Goals shown to students:</b></p><ul class="glist" style="margin:0 0 6px">' + D.goals.map(g => '<li><span class="gtag g-' + g.k + '">' + esc(g.short) + '</span> ' + esc(g.text) + '</li>').join("") + '</ul>' +
       '<p style="margin:0"><b>Input:</b> each student’s own 7-day Air Watch (' + hwN + ' students, ' + rd + ' readings) and a live PM2.5 meter at the jar. Book pages 30–34 are used in class; page 35 and the page-36 self-assessment are in the next lesson (E12).</p>';
   }
 
@@ -148,16 +159,16 @@
     lv.classList.toggle("err", !LS.available() || connected === false);
     tx.textContent = !LS.available() ? "No database connection" : connected === false ? "Reconnecting…" : "Live · read-only";
   }
-  buildTalk(); paintMap(); paintPairs(); paintFeed(); paintRub(); paintChecks(); paintAbout(); tick();
-  setInterval(() => { later("map", paintMap, 50); later("pairs", paintPairs, 50); later("rub", paintRub, 50); }, 5000);
+  buildTalk(); paintMap(); paintPairs(); paintFeed(); paintGoals(); paintRub(); paintChecks(); paintAbout(); tick();
+  setInterval(() => { later("map", paintMap, 50); later("pairs", paintPairs, 50); later("rub", paintRub, 50); later("goals", paintGoals, 60); }, 5000);
   LS.watchConnected(v => { connected = v; paintLive(); });
-  LS.watchState(s => { ST = s || {}; tick(); later("map", paintMap, 100); later("pairs", paintPairs, 100); later("rub", paintRub, 400); later("feed", paintFeed, 300); });
-  LS.watchPairs(v => { PAIRS = v || {}; later("pairs", paintPairs, 400); later("rub", paintRub, 1000); later("chk", paintChecks, 1000); later("feed", paintFeed, 600); });
+  LS.watchState(s => { ST = s || {}; later("goals", paintGoals, 300); tick(); later("map", paintMap, 100); later("pairs", paintPairs, 100); later("rub", paintRub, 400); later("feed", paintFeed, 300); });
+  LS.watchPairs(v => { PAIRS = v || {}; later("goals", paintGoals, 800); later("pairs", paintPairs, 400); later("rub", paintRub, 1000); later("chk", paintChecks, 1000); later("feed", paintFeed, 600); });
   LS.watchQuestions(v => { QS = v || {}; later("feed", paintFeed, 300); later("rub", paintRub, 1000); });
   LS.watchSuggestions(v => { SUGG = v || {}; later("feed", paintFeed, 300); later("rub", paintRub, 1000); });
   LS.watchFeedback(v => { FB = v || {}; later("feed", paintFeed, 300); later("rub", paintRub, 1000); });
   LS.watchVotes(v => { VOTES = v || {}; });
-  LS.watchEvents(v => { EVENTS = v || {}; later("map", paintMap, 300); later("feed", paintFeed, 300); later("rub", paintRub, 1000); });
+  LS.watchEvents(v => { EVENTS = v || {}; later("goals", paintGoals, 600); later("map", paintMap, 300); later("feed", paintFeed, 300); later("rub", paintRub, 1000); });
   LS.watchHomework(v => { HOMEWORK = v || {}; later("about", paintAbout, 300); later("rub", paintRub, 1000); later("pairs", paintPairs, 400); });
   paintLive();
 })();

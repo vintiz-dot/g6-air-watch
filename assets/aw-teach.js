@@ -40,11 +40,12 @@
       '<div class="tgrid">' +
         '<div class="tleft">' +
           '<div class="card" id="sess"></div>' +
-          '<div class="card"><h3>Screens <small>44 min + 1 to close = 45</small></h3><div class="steps" id="steps"></div><div class="stepnow" id="stepNow"></div><div class="tctrl" id="tctrl"></div><button class="btn g bigbtn" id="nextBtn" type="button" hidden></button></div>' +
+          '<div class="card"><h3>Screens <small>44 min + 1 to close = 45</small></h3><div class="steps" id="steps"></div><div class="stepnow" id="stepNow"></div><div class="tctrl" id="tctrl"></div><div class="navrow"><button class="btn ghost" id="backBtn" type="button" hidden>← Back</button><button class="btn g bigbtn" id="nextBtn" type="button" hidden></button></div></div>' +
           '<div class="card" id="run"></div>' +
         '</div>' +
         '<div class="tmid"><div class="card"><div class="pairhead" id="phead"></div><div class="pairs" id="pairs"></div></div></div>' +
         '<div class="tright">' +
+          '<div class="card" id="goalsCard"></div>' +
           '<div class="card" id="voice"></div>' +
           '<div class="card" id="targets"></div>' +
           '<div class="card"><h3>Log <small>the observers see this too</small></h3><ul class="log" id="log"></ul></div>' +
@@ -53,19 +54,26 @@
     $("#openProj").onclick = () => { projWin = window.open("projector.html", "aw_projector", "popup=yes,width=1280,height=720"); later("sess", paintSessionDyn, 500); };
     $("#openObs").onclick = () => window.open("observer.html", "_blank");
     document.addEventListener("keydown", keys);
+    const fit = () => {
+      const wide = window.innerWidth >= 1281;
+      document.body.classList.toggle("cockpit", wide);
+      if (wide) document.documentElement.style.setProperty("--colH", Math.max(320, window.innerHeight - $("#bar").offsetHeight - 12) + "px");
+    };
+    window.addEventListener("resize", fit); fit(); setTimeout(fit, 400);
+    $("#spotOff").onclick = () => LS.setState({ spot: null });
     setInterval(tick, 500);
     setInterval(() => later("pairs", paintPairs, 50), 5000);
 
     LS.onError(paintLive);
     LS.watchConnected(v => { connected = v; paintLive(); later("sess", paintSessionDyn, 200); });
-    LS.watchState(s => { ST = s || {}; onState(); });
-    LS.watchPairs(v => { PAIRS = v || {}; later("pairs", paintPairs, 250); later("run", paintRunLive, 300); later("rules", paintRules, 300); later("targets", paintTargets, 900); later("sess", paintSessionDyn, 400); });
+    LS.watchState(s => { ST = s || {}; onState(); later("goals", paintGoals, 300); });
+    LS.watchPairs(v => { PAIRS = v || {}; later("goals", paintGoals, 800); later("pairs", paintPairs, 250); later("run", paintRunLive, 300); later("rules", paintRules, 300); later("targets", paintTargets, 900); later("sess", paintSessionDyn, 400); });
     LS.watchQuestions(v => { QS = v || {}; later("voice", paintVoice, 200); later("targets", paintTargets, 900); later("run", paintRunLive, 300); });
     LS.watchSuggestions(v => { SUGG = v || {}; later("voice", paintVoice, 200); later("targets", paintTargets, 900); });
     LS.watchFeedback(v => { FB = v || {}; later("run", paintRunLive, 300); later("targets", paintTargets, 900); });
     LS.watchVotes(v => { VOTES = v || {}; later("run", paintRunLive, 200); later("rules", paintRules, 200); });
     LS.watchMeter(v => { METER = v || {}; paintMeterInputs(); later("run", paintRunLive, 200); later("sess", paintSessionDyn, 300); });
-    LS.watchEvents(v => { EVENTS = v || {}; later("log", paintLog, 300); later("targets", paintTargets, 900); });
+    LS.watchEvents(v => { EVENTS = v || {}; later("goals", paintGoals, 600); later("log", paintLog, 300); later("targets", paintTargets, 900); });
     LS.watchHomework(v => { HOMEWORK = v || {}; later("photos", paintAllPhotos, 300); later("sess", paintSessionDyn, 300); later("pairs", paintPairs, 300); later("run", paintRunLive, 300); });
     LS.watchHomeworkConfig(v => { HWCFG = v || {}; later("sess", paintSessionDyn, 300); });
     LS.watchPhotoFlags(v => { FLAGS = v || {}; later("photos", paintAllPhotos, 300); });
@@ -80,6 +88,7 @@
   }
 
   function onState() {
+    const so = $("#spotOff"); if (so) so.hidden = !ST.spot;
     if (LOC.reset !== ST.reset) { LOC = { reset: ST.reset, tab: LOC.tab }; saveLoc(); }
     paintSession();
     paintSteps();
@@ -204,8 +213,11 @@
     if (ST.startedAt && ST.live !== false) {
       const T = U.timer(ST, now());
       [["+1 min", plus1], [T && T.paused ? "▶ Resume" : "❚❚ Pause", T && T.paused ? resume : pause], ["↺ " + scr(n).min + " min again", restart]].forEach(([l, f]) => { const b = el("button", "btn sm ghost", l); b.type = "button"; b.onclick = f; tc.appendChild(b); });
-      tc.appendChild(el("span", "vn", "Keys: N next · P pause · + minute · Esc clear spotlight")).style.fontSize = "11px";
+      tc.appendChild(el("span", "vn", "Keys: N next · B back · P pause · + minute · Esc end spotlight")).style.fontSize = "11px";
     }
+    const bb = $("#backBtn"), pv = D.screens[n - 2];
+    bb.hidden = !ST.reset || !ST.startedAt || ST.live === false || !pv;
+    if (pv) { bb.textContent = "← Back to " + pv.n; bb.title = "Open screen " + pv.n + " · " + pv.name + " again"; bb.onclick = () => openScreen(pv.n); }
     const nb = $("#nextBtn"), nx = D.screens[n];
     if (!ST.reset || !ST.startedAt || ST.live === false) nb.hidden = true;
     else if (!nx) { nb.hidden = false; confirmBtn(nb, "Finish — end the lesson", "Click again to end", () => LS.endSession()); }
@@ -216,6 +228,7 @@
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || e.ctrlKey || e.metaKey || e.altKey) return;
     if (!ST.startedAt || ST.live === false) return;
     if (e.key === "n" || e.key === "N") { const nx = D.screens[cur()]; if (nx) openScreen(nx.n); }
+    else if (e.key === "b" || e.key === "B") { const pv = D.screens[cur() - 2]; if (pv) openScreen(pv.n); }
     else if (e.key === "p" || e.key === "P") { ST.pausedLeft != null ? resume() : pause(); }
     else if (e.key === "+" || e.key === "=") plus1();
     else if (e.key === "Escape") { if (ST.spot) LS.setState({ spot: null }); closePop(); }
@@ -226,8 +239,9 @@
     const n = cur(), s = scr(n), r = $("#run");
     r.className = "card ph-" + s.phase.toLowerCase();
     LOC.did = LOC.did || {}; const did = LOC.did[n] = LOC.did[n] || {};
-    r.innerHTML = '<h3>' + n + ' · ' + esc(s.name) + ' <small>' + esc(s.phase) + ' · ' + s.min + ' min</small></h3><ul class="script" id="script"></ul>' +
-      '<div class="cut" id="cutBox"><b>If you are behind</b>' + esc(D.cut[n] || "") + '</div><div id="ctl"></div><div id="spotCtl"></div><div id="runLive"></div>';
+    r.innerHTML = '<h3>' + n + ' · ' + esc(s.name) + ' <small>' + esc(s.phase) + ' · ' + s.min + ' min</small></h3>' +
+      '<div id="ctl"></div><div id="spotCtl"></div><div class="runlbl">Run sheet</div><ul class="script" id="script"></ul>' +
+      '<div class="cut" id="cutBox"><b>If you are behind</b>' + esc(D.cut[n] || "") + '</div><div id="runLive"></div>';
     (D.script[n] || []).forEach((line, i) => {
       const li = el("li", did[i] ? "did" : "", '<input type="checkbox"' + (did[i] ? " checked" : "") + '><span>' + esc(line) + '</span>');
       li.querySelector("input").onchange = e => { did[i] = e.target.checked; li.classList.toggle("did", did[i]); saveLoc(); };
@@ -240,7 +254,7 @@
     if (n === 4) { add("sort", "Reveal the sort answers"); add("q1q2", "Reveal Q1, Q2 & language answers"); }
     if (n === 6) add("dbq", "Reveal the DBQ answers");
     if (n === 8) add("q3", "Reveal the Q3 answer");
-    if (n === 9) { add("shift", "Show before → after"); add("goals", "Show the 3 goals on the board"); }
+    if (n === 9) { add("shift", "Show before → after"); add("goals", "Show the goals and self-ratings on the board"); }
     if (rev.children.length) ctl.appendChild(rev);
     if (n === 2) { const d = el("details", "setupbox", '<summary><b>Photo game</b> <span class="vn">' + (ST.photos || []).length + ' of 3 chosen</span></summary><div class="photobox"></div>'); d.open = !(ST.photos || []).length; ctl.appendChild(d); mountPhotos(d.querySelector(".photobox")); }
     if (n === 3) { const m = el("div", "meterbox"); ctl.appendChild(m); mountMeter(m, "r"); }
@@ -307,7 +321,15 @@
     if (n === 9) {
       const sh = E.shift(PAIRS);
       h = '<b>Before → now</b>' + miniBars(D.vote.opts.map(o => ({ label: o[1] + " (start " + sh.pre[o[0]] + ")", v: sh.post[o[0]], of: N, key: o[0] === "no" }))) +
-        'Moved away from “yes”: ' + sh.moved + ' of ' + sh.both + ' · goals from memory 2–3: ' + cnt(p => +A(p, 9).recall >= 2) + ' of ' + N + ' · self-rated all three: ' + cnt(p => E.arr(A(p, 9).rate).filter(r => r && r.lv).length === 3);
+        'Moved away from “yes”: ' + sh.moved + ' of ' + sh.both + '<br><b>From memory</b> — science goal got it: ' + cnt(p => (A(p, 9).rec || {}).sci === "got") + ', partly: ' + cnt(p => (A(p, 9).rec || {}).sci === "partly") +
+        ' · thinking goal got it: ' + cnt(p => (A(p, 9).rec || {}).think === "got") + ', partly: ' + cnt(p => (A(p, 9).rec || {}).think === "partly") + ' (of ' + N + ') · self-rated all three: ' + cnt(p => E.arr(A(p, 9).rate).filter(r => r && r.lv).length === 3);
+      const typed = L.filter(p => txt(A(p, 9).memSci) || txt(A(p, 9).memThink)).sort((x, y) => x.st - y.st);
+      if (typed.length) {
+        const w = { got: "got it", partly: "partly", missed: "missed" };
+        const one = (a, k, f) => '<span class="gtag sm g-' + k + '">' + (k === "sci" ? "S" : "T") + '</span> ' + (txt(a[f]) ? '“' + esc(txt(a[f])) + '”' : '—') + ((a.rec || {})[k] ? ' <i>' + w[a.rec[k]] + '</i>' : '');
+        h += '<div class="memlist"><b>What each pair typed from memory</b>' + typed.map(p => { const a = A(p, 9);
+          return '<div><b>' + p.st + '</b> ' + one(a, "sci", "memSci") + '<br>' + one(a, "think", "memThink") + '</div>'; }).join("") + '</div>';
+      }
     }
     box.innerHTML = h ? '<div style="margin-top:10px;font-size:13px">' + h + '</div>' : "";
   }
@@ -382,7 +404,7 @@
     if (box.dataset.key === key) return; box.dataset.key = key;
     if (rv) {
       const tot = Object.values(c).reduce((s, v) => s + v, 0);
-      box.innerHTML = '<b>' + (rv.open === false ? "Vote closed" : "Voting now") + '</b> <span class="vn">' + tot + ' votes</span>' +
+      box.innerHTML = '<b>' + (rv.open === false ? "Vote closed" : "Voting now") + '</b> <span class="vn">' + tot + (tot === 1 ? " vote" : " votes") + '</span>' +
         miniBars(rv.items.map((it, i) => ({ label: "ABC"[i] + ". " + it.text, v: c[i] || 0, of: Math.max(1, tot) })), "stack") +
         (ST.classRule ? '<div class="cut" style="background:var(--okBg);border-color:var(--green);color:var(--okInk)"><b>Class rule</b>' + esc(ST.classRule.text) + '</div>' : '') +
         '<div class="btns"></div>';
@@ -456,7 +478,9 @@
       card.innerHTML = '<div class="ph"><span class="stn">' + p.st + '</span><span class="who">' + esc(p.names.join(" & ")) + '<small>' + (c.dup ? "⚠ two laptops on station " + p.st : lastT ? "last typed " + U.ago(t - lastT) + " ago" : "joined " + clock(p.joined)) + '</small></span>' +
         (help ? '<span class="flag hp">HELP · ' + U.ago(t - help) + '</span>' : done ? '<span class="flag dn">✓ done</span>' : idle ? '<span class="flag id">quiet</span>' : '') + '</div>' +
         '<div class="prog" title="' + pr.got + ' of ' + pr.of + ' parts"><i style="width:' + U.pct(pr.got, pr.of) + '%"></i></div>' +
-        '<div class="sum">' + E.summary(n, p, cx) + '</div><div class="acts"></div>';
+        '<div class="sum">' + E.summary(n, p, cx) + '</div>' +
+        (ST.startedAt ? '<div class="pg">' + E.pairGoals(p, ST).map(x => x.of ? '<span class="gtag sm g-' + x.k + '" title="' + esc(x.short) + ' checks met so far">' + esc(x.short[0]) + ' ' + x.met + '/' + x.of + '</span>' : '').join("") + '</div>' : '') +
+        '<div class="acts"></div>';
       const acts = card.querySelector(".acts");
       const nb = el("button", "btn ghost", "Nudge ▾"); nb.type = "button"; nb.onclick = ev => { ev.stopPropagation(); nudgeMenu(nb, p); }; acts.appendChild(nb);
       const sp = spotText(n, a);
@@ -532,6 +556,23 @@
         list.appendChild(it);
       });
     }
+  }
+
+  /* ───────── the three goals, measured as the lesson goes ───────── */
+  function paintGoals() {
+    const box = $("#goalsCard"); if (!box) return;
+    const G = E.goals(X());
+    const det = box.querySelector("details"); if (det) LOC.gdet = det.open;
+    const h = '<h3>Goals — measured as we go <small>class · finished screens</small></h3>' + G.map(g => {
+      const tone = E.goalTone(g.pct);
+      return '<div class="goalrow"><div class="gtop"><span class="gtag g-' + g.k + '" title="' + esc(g.text) + '">' + esc(g.short) + '</span><span class="gpct">' + (g.pct == null ? "–" : g.pct + "%") + '</span></div>' +
+        '<div class="gbar st-' + tone + '"><i style="width:' + (g.pct || 0) + '%"></i></div>' +
+        '<div class="gmeta">' + g.closed + ' of ' + g.checks.length + ' checks done' + (g.live ? ' · on this screen now: ' + g.livePct + '%' : '') + '</div></div>';
+    }).join("") +
+      '<details class="gdet"' + (LOC.gdet ? " open" : "") + '><summary>Every check (pairs who met it)</summary>' +
+      G.map(g => g.checks.map(c => '<div class="gck ' + c.state + '"><span class="gtag sm g-' + g.k + '">' + esc(g.short[0]) + '</span><span>' + c.n + ' · ' + esc(c.label) + '</span><b>' + (c.state === "later" ? "–" : c.met + "/" + c.N) + '</b></div>').join("")).join("") + '</details>';
+    if (box.dataset.h === h) return; box.dataset.h = h; box.innerHTML = h;
+    box.querySelector("details").ontoggle = e => { LOC.gdet = e.target.open; saveLoc(); };
   }
 
   /* ───────── live targets + log ───────── */

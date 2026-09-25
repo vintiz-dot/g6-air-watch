@@ -4,15 +4,34 @@
   const { U, LS, HW, CH } = window.AWL;
   const { $, esc, txt, el } = U;
   const C = window.AW, D = window.LESSON, CAT = window.AW_CAT, CATS = window.AW_CATS, PARTS = window.AW_PARTS;
-  const K = "aw_lesson_pair";
+  const K = "aw_lesson_pair_";
 
-  /* ───────── local state ───────── */
-  let P;
-  try { P = JSON.parse(localStorage.getItem(K) || "{}"); } catch (e) { P = {}; }
-  if (!P.pid) P.pid = "P" + Math.random().toString(36).slice(2, 10);
+  /* ───────── local state: one group per browser tab ─────────
+     sessionStorage holds this tab's group id, so several tabs on one computer are separate groups;
+     localStorage keeps each group's work, so a reloaded or reopened tab can carry on. */
+  const newPid = () => "P" + Math.random().toString(36).slice(2, 10);
+  const loadPair = pid => { try { return JSON.parse(localStorage.getItem(K + pid) || "null"); } catch (e) { return null; } };
+  let P = null, tabPid = null;
+  try { tabPid = sessionStorage.getItem("aw_tab_pid"); } catch (e) {}
+  if (tabPid) P = loadPair(tabPid);
+  if (!P || !P.pid) P = { pid: tabPid || newPid(), a: {} };
   P.a = P.a || {};
-  const saveLocal = () => { try { localStorage.setItem(K, JSON.stringify(P)); } catch (e) {} };
+  const saveLocal = () => { try { sessionStorage.setItem("aw_tab_pid", P.pid); localStorage.setItem(K + P.pid, JSON.stringify(P)); } catch (e) {} };
   saveLocal();
+  /* heartbeat: tells other tabs on this laptop that this group's page is still open */
+  const beat = () => { try { if (P.joined) localStorage.setItem("aw_alive_" + P.pid, String(Date.now())); } catch (e) {} };
+  setInterval(beat, 4000);
+  window.addEventListener("pagehide", () => { try { localStorage.setItem("aw_alive_" + P.pid, "0"); } catch (e) {} });
+  /* Firebase returns lists as objects when they have gaps: turn them back into lists */
+  function fixArrays(v) {
+    if (Array.isArray(v)) return v.map(fixArrays);
+    if (!v || typeof v !== "object") return v;
+    const keys = Object.keys(v);
+    if (keys.length && keys.every(k => /^\d+$/.test(k))) { const out = []; keys.forEach(k => { out[+k] = fixArrays(v[k]); }); return out; }
+    const o = {}; keys.forEach(k => { o[k] = fixArrays(v[k]); }); return o;
+  }
+  const namesOf = q => (Array.isArray(q && q.names) ? q.names : Object.values((q && q.names) || {})).filter(Boolean);
+  const sameNames = (x, y) => x.map(v => txt(v).toLowerCase()).sort().join("|") === y.map(v => txt(v).toLowerCase()).sort().join("|");
 
   let ST = {}, HOMEWORK = {}, PAIRS = {}, METER = {}, VOTES = {}, FEEDBACK = {}, SUGG = {};
   let shown = 0, offline = false, offlineScreen = 1;
@@ -46,6 +65,28 @@
     $("#dock").hidden = true; $("#roles").hidden = true;
     const app = $("#app"); app.innerHTML = "";
     const c = el("div", "card");
+    /* groups saved on this laptop in this lesson whose page is closed (no heartbeat for 12 s) */
+    const closed = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i); if (!key || key.indexOf(K) !== 0) continue;
+        const q = loadPair(key.slice(K.length));
+        if (!q || !q.pid || q.pid === P.pid || !q.joined || !q.names || !q.names.length) continue;
+        if (ST.reset && q.joined < ST.reset) continue;
+        if (Date.now() - (+localStorage.getItem("aw_alive_" + q.pid) || 0) < 12000) continue;
+        closed.push(q);
+      }
+    } catch (e) {}
+    if (closed.length) {
+      closed.sort((x, y) => x.st - y.st);
+      const rb = el("div", "card resume", '<b>Did your page close?</b><p class="vn" style="margin:4px 0 8px">Carry on with your work — or join as a new group below.</p>');
+      closed.slice(0, 4).forEach(q => {
+        const go = el("button", "btn g sm", "Continue as Station " + esc(q.st) + " · " + esc(q.names.join(" & "))); go.type = "button"; go.style.margin = "0 6px 6px 0";
+        go.onclick = () => { P = q; saveLocal(); beat(); watchMyNudges(); shown = 0; render(true); toast("Welcome back — your work is here."); };
+        rb.appendChild(go);
+      });
+      app.appendChild(rb);
+    }
     c.innerHTML = '<div class="eyebrow">Before we start</div><h2 class="title">Who is at this laptop?</h2>' +
       '<p class="sub">Choose your station number (on the card on your desk), then your names.</p>' +
       '<label>Station</label><div class="chips" id="stn"></div>' +
@@ -83,7 +124,15 @@
       const real = codes.filter(Boolean);
       if (new Set(real).size !== real.length) { $("#je").textContent = "Choose different names."; return; }
       if ($("#n2").value === "__none" && names.length > 1) { $("#je").textContent = "‘No partner today’ is only for one person."; return; }
-      P.names = names; P.codes = codes; P.joined = LS.now(); P.a = {}; saveLocal();
+      /* the same station and names already joined this lesson (page closed, or another laptop): carry on as that group */
+      const same = Object.keys(PAIRS).find(pid => { const q = PAIRS[pid]; return q && pid !== P.pid && +q.st === +P.st && (!ST.reset || (q.joined || 0) >= ST.reset) && sameNames(namesOf(q), names); });
+      if (same) {
+        const local = loadPair(same), q = PAIRS[same];
+        P = local && local.joined ? local : { pid: same, st: P.st, names, codes, joined: q.joined, a: fixArrays(q.a || {}) };
+        P.a = P.a || {}; saveLocal(); beat(); watchMyNudges(); shown = 0; render(true); toast("Welcome back — your work is here.");
+        return;
+      }
+      P.names = names; P.codes = codes; P.joined = LS.now(); P.a = {}; saveLocal(); beat();
       LS.savePair(P.pid, { st: P.st, names, codes, joined: P.joined }).then(() => { render(true); });
       if (!LS.available()) render(true);
     };
@@ -124,7 +173,9 @@
 
   function header(n) {
     const s = D.screens[n - 1];
-    return '<div class="eyebrow ' + s.phase.toLowerCase() + '">' + esc(s.phase) + ' · ' + n + ' of 9</div><h2 class="title">' + esc(s.name) + '</h2>';
+    const gs = ((D.screenGoals || {})[n] || []).map(k => D.goals.find(g => g.k === k)).filter(Boolean);
+    return '<div class="eyebrow ' + s.phase.toLowerCase() + '">' + esc(s.phase) + ' · ' + n + ' of 9</div><h2 class="title">' + esc(s.name) + '</h2>' +
+      (gs.length ? '<div class="gtags"><span class="vn">This screen works on:</span>' + gs.map(g => '<span class="gtag g-' + g.k + '" title="' + esc(g.text) + '">' + esc(g.short) + '</span>').join("") + '</div>' : '');
   }
   function bookBox(page, text, extra) {
     return '<div class="bookq"><div class="bk">Book page ' + page + ' — word for word</div><div class="bt">' + esc(text) + '</div>' + (extra || "") + '</div>';
@@ -442,25 +493,37 @@
     },
 
     9(n, box) {
-      const a = A(n); a.rate = a.rate || [{}, {}, {}];
+      const a = A(n); a.rate = a.rate || [{}, {}, {}]; a.rec = a.rec || {};
       box.innerHTML = header(n);
       const v = el("div", "task", '<h3>' + esc(D.vote.q) + '</h3><p class="vn">Same question as the start. Answer again.</p>');
       v.appendChild(chips(D.vote.opts, a.post, k => { a.post = k; saveAns(n, true); }));
       v.appendChild(chips([["1", "Not sure"], ["2", "Quite sure"], ["3", "Very sure"]], a.postConf, k => { a.postConf = k; saveAns(n); }));
       box.appendChild(v);
-      const g = el("div", "task", '<h3>Today’s three goals — from memory</h3><p class="vn">Do not look. Type what you remember.</p><textarea id="gm" rows="3" placeholder="1… 2… 3…"></textarea><div class="btns"><button class="btn" id="gmb">Show the goals and score ourselves</button></div><div id="rate"></div>');
+      const g = el("div", "task", '<h3>Today’s goals — from memory</h3><p class="vn">Do not look at the goals. Write them in your own words — a few words is enough.</p>' +
+        '<label for="gmS"><span class="gtag g-sci">Science</span> Our science goal today was…</label><textarea id="gmS" rows="2" placeholder="I can explain…"></textarea>' +
+        '<label for="gmT"><span class="gtag g-think">Thinking</span> Our thinking goal today was…</label><textarea id="gmT" rows="2" placeholder="I can…"></textarea>' +
+        '<div class="btns"><button class="btn" id="gmb">Check our answers</button></div><div class="err" id="gme"></div><div id="rate"></div>');
       box.appendChild(g);
-      const gm = g.querySelector("#gm"); gm.value = a.goals || ""; gm.oninput = () => { a.goals = gm.value; saveAns(n); };
-      $("#gmb").onclick = () => { if (txt(a.goals).length < 10) { gm.focus(); return; } a.goalsShown = LS.now(); saveAns(n, true); paintRate(); };
+      const gS = g.querySelector("#gmS"), gT = g.querySelector("#gmT");
+      gS.value = a.memSci || ""; gT.value = a.memThink || "";
+      gS.oninput = () => { a.memSci = gS.value; saveAns(n); };
+      gT.oninput = () => { a.memThink = gT.value; saveAns(n); };
+      $("#gmb").onclick = () => {
+        if (txt(a.memSci).length < 6 || txt(a.memThink).length < 6) { $("#gme").textContent = "Write both goals first."; return; }
+        $("#gme").textContent = ""; a.goalsShown = LS.now(); saveAns(n, true); paintRate();
+      };
       function paintRate() {
         const r = $("#rate"); r.innerHTML = ""; if (!a.goalsShown) return;
-        $("#gmb").hidden = true; gm.readOnly = true;
-        const rc = el("div", "raterow", '<p><b>How many of the 3 goals did we remember?</b></p>');
-        rc.appendChild(chips([["0", "0"], ["1", "1"], ["2", "2"], ["3", "All 3"]], a.recall != null ? String(a.recall) : null, k => { a.recall = +k; saveAns(n, true); }, "sm"));
-        r.appendChild(rc);
-        r.appendChild(el("p", "vn", "Now judge yourselves: for each goal choose NOT YET, ALMOST or YES — and the screen that proves it."));
-        D.criteria.forEach((c, i) => {
-          const row = el("div", "raterow", '<p><b>' + (i + 1) + '.</b> ' + esc(c) + '</p>');
+        $("#gmb").hidden = true; gS.readOnly = true; gT.readOnly = true;
+        [["sci", "memSci"], ["think", "memThink"]].forEach(([k, f]) => {
+          const goal = D.goals.find(x => x.k === k);
+          const row = el("div", "raterow recall", '<p><span class="gtag g-' + k + '">' + esc(goal.label) + '</span> ' + esc(goal.text) + '</p><p class="vn">You wrote: “' + esc(txt(a[f])) + '”</p><p><b>Did you get it?</b></p>');
+          row.appendChild(chips([["got", "Got it"], ["partly", "Partly"], ["missed", "Missed it"]], a.rec[k], v => { a.rec[k] = v; a.recall = ["sci", "think"].filter(x => a.rec[x] === "got").length; saveAns(n, true); }, "sm"));
+          r.appendChild(row);
+        });
+        r.appendChild(el("p", "vn", "Now judge yourselves on all three goals: NOT YET, ALMOST or YES — and the screen that proves it."));
+        D.goals.forEach((goal, i) => {
+          const row = el("div", "raterow", '<p><span class="gtag g-' + goal.k + '">' + esc(goal.short) + '</span> ' + esc(goal.text) + '</p>');
           row.appendChild(chips(D.reflect.levels, a.rate[i].lv, k => { a.rate[i].lv = k; saveAns(n); }, "sm"));
           const s = el("select"); s.innerHTML = '<option value="">The screen that proves it…</option>' + D.screens.map(x => '<option value="' + x.n + '"' + (+a.rate[i].ev === x.n ? " selected" : "") + '>' + x.n + ' · ' + esc(x.name) + '</option>').join("");
           s.onchange = () => { a.rate[i].ev = s.value; saveAns(n); };
@@ -480,7 +543,7 @@
   };
 
   function ruleText(f, parts) { let s = ""; f.parts.forEach((p, i) => { s += p + " "; if (parts[i]) s += txt(parts[i]) + " "; }); return txt(s.replace(/\s+/g, " ")); }
-  function goalsCard() { return el("div", "goals", '<b>Our 3 goals today</b><ol>' + D.criteria.map(c => '<li>' + esc(c) + '</li>').join("") + '</ol>'); }
+  function goalsCard() { return el("div", "goals", '<b>Our 3 goals today</b><ul class="glist">' + D.goals.map(g => '<li><span class="gtag g-' + g.k + '">' + esc(g.short) + '</span> ' + esc(g.text) + '</li>').join("") + '</ul>'); }
 
   /* ───────── live sub-panels ───────── */
   function paint2() {
@@ -607,7 +670,7 @@
       if (P.help) LS.logEvent("help", { pid: P.pid, st: P.st, n: screenNow() });
       help.classList.toggle("on", P.help); help.textContent = P.help ? "Help asked — waiting" : "Help";
     };
-    goals.onclick = () => { if (screenNow() === 9 && !A(9).goalsShown) { toast("Try from memory first!"); return; } toast(D.criteria.map((c, i) => (i + 1) + ". " + c).join("\n"), 9000); };
+    goals.onclick = () => { if (screenNow() === 9 && !A(9).goalsShown) { toast("Try from memory first!"); return; } toast(D.goals.map(g => g.label + ": " + g.text).join("\n\n"), 10000); };
     idea.onclick = () => {
       if ($("#ideaBox")) { $("#ideaBox").remove(); return; }
       const b = el("div", "card ideabox", '<b>Suggest a change to this task</b><p class="vn">e.g. “We want to use a different station because…”, “Can we work alone for this part?”</p><textarea rows="2" maxlength="200"></textarea><div class="btns"><button class="btn sm">Send to our teacher</button></div>');
@@ -641,6 +704,13 @@
       nav.appendChild(back); nav.appendChild(next); app.appendChild(nav);
     }
     window.scrollTo({ top: 0 });
+  }
+
+  /* private nudges for this group (re-subscribed if the tab carries on as another group) */
+  const nudgeSubs = {};
+  function watchMyNudges() {
+    const pid = P.pid; if (nudgeSubs[pid] || !LS.available()) return; nudgeSubs[pid] = 1;
+    LS.watchNudge(pid, v => { if (pid !== P.pid) return; if (v && v.at && v.at > (P.lastNudge || 0)) { P.lastNudge = v.at; saveLocal(); if (joined()) toast("From your teacher: " + v.text, 8000); } });
   }
 
   /* ───────── boot ───────── */
@@ -679,7 +749,7 @@
     LS.watchMeter(v => { METER = v || {}; if (screenNow() === 3) paintMeter(); });
     LS.watchVotes(v => { VOTES = v || {}; });
     LS.watchFeedback(v => { FEEDBACK = v || {}; if (screenNow() === 8) paint8(); if (screenNow() === 9) paint9(); });
-    LS.watchNudge(P.pid, v => { if (v && v.at && v.at > (P.lastNudge || 0)) { P.lastNudge = v.at; saveLocal(); if (joined()) toast("From your teacher: " + v.text, 8000); } });
+    watchMyNudges();
     LS.watchSuggestions(v => {
       SUGG = v || {};
       Object.keys(SUGG).forEach(id => { const s = SUGG[id]; if (s.pid === P.pid && s.status !== "new" && !P["seen_" + id]) { P["seen_" + id] = 1; saveLocal(); toast(s.status === "yes" ? "Your teacher said YES to your idea: “" + s.text + "”" : "Your teacher says: not this time — “" + s.text + "”", 8000); } });

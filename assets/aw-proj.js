@@ -6,7 +6,7 @@
   const { $, esc } = U;
   const C = window.AW, D = window.LESSON, CAT = window.AW_CAT, E = window.AWE;
   const NST = C.stations || 11;
-  let ST = {}, PAIRS = {}, QS = {}, VOTES = {}, METER = {}, HOMEWORK = {}, HWCFG = {}, FB = {};
+  let ST = {}, PAIRS = {}, QS = {}, VOTES = {}, METER = {}, HOMEWORK = {}, HWCFG = {}, FB = {}, EVENTS = {};
   let builtKey = null, upd = null, aqNow = null, aqUid = null;
   const photoSrc = {};
   const rev = k => !!(ST.reveal && ST.reveal[k]);
@@ -61,7 +61,7 @@
     ended(stg) { stg.innerHTML = '<div class="pwait"><div class="pq">Thank you, Grade 6.</div><p style="font-size:1.25em;margin:0;max-width:70%">' + esc(D.reflect.next) + '</p></div>'; return null; },
 
     s1(stg) {
-      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>Our big question</h3><div class="pq">' + esc(D.bigQ) + '</div><h3 style="margin-top:1em">Our 3 goals today</h3><ol class="pgoals">' + D.criteria.map(c => '<li>' + esc(c) + '</li>').join("") + '</ol></div>' +
+      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>Our big question</h3><div class="pq">' + esc(D.bigQ) + '</div><h3 style="margin-top:1em">Our 3 goals today</h3><ul class="pgoals labelled">' + D.goals.map(g => '<li><span class="gtag g-' + g.k + '">' + esc(g.short) + '</span> ' + esc(g.text) + '</li>').join("") + '</ul></div>' +
         '<div class="pcard"><h3>Silent start <small>on your laptop</small></h3><ol class="pgoals"><li>Tap your worst day — the highest number.</li><li>Were your eyes right on that day?</li><li>Vote: can you tell by looking?</li></ol><h3 style="margin-top:1em">Stations</h3><div class="pjoin" id="pj"></div><p class="pnote" id="pv"></p></div></div>';
       return () => { joinGrid($("#pj")); $("#pv").textContent = answered(1, a => a.pre) + " of " + pairsL().length + " pairs have voted. The class answer stays hidden until the end of the lesson."; };
     },
@@ -208,7 +208,7 @@
     },
 
     s9(stg) {
-      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>' + esc(D.vote.q) + '</h3><div id="sh"></div></div><div class="pcard"><h3>Our 3 goals</h3><div id="gl"></div><p class="pnote" id="nx" style="margin-top:auto"></p></div></div>';
+      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>' + esc(D.vote.q) + '</h3><div id="sh"></div><p class="pnote" id="nx" style="margin-top:auto"></p></div><div class="pcard"><h3>Our 3 goals</h3><div id="gl"></div></div></div>';
       return () => {
         const L = pairsL(), sh = E.shift(PAIRS);
         const tot = o => Math.max(1, Object.values(o).reduce((s, v) => s + v, 0));
@@ -219,16 +219,18 @@
             return '<div class="row"><span class="l">' + esc(o[1]) + '</span><div class="bb"><div class="b0"><i style="width:' + a + '%"></i><em>' + a + '% at the start</em></div><div class="b1"><i style="width:' + b + '%"></i><em>' + b + '% now</em></div></div></div>';
           }).join("") + '</div><p class="pq" style="font-size:1.3em;margin-top:.6em">' + sh.moved + ' of ' + sh.both + ' pairs changed their minds.</p>';
         } else $("#sh").innerHTML = '<p class="pq" style="font-size:1.4em">Same question as the start — answer again on your laptop.</p><p class="pnote">' + answered(9, a => a.post) + ' of ' + L.length + ' pairs have answered.</p>';
-        const typed = answered(9, a => a.goalsShown), rec = answered(9, a => +a.recall >= 2);
+        const typed = answered(9, a => a.goalsShown);
+        const got = k => answered(9, a => (a.rec || {})[k] === "got");
         if (rev("goals")) {
-          const rows = D.criteria.map((c, i) => {
+          const rows = D.goals.map((g, i) => {
             const n = { yes: 0, almost: 0, no: 0 };
             L.forEach(p => { const r = E.arr((((p.a || {}).s9) || {}).rate)[i]; if (r && r.lv && n[r.lv] != null) n[r.lv]++; });
             const t = Math.max(1, n.yes + n.almost + n.no);
-            return '<li>' + esc(c) + '<div class="stack"><i class="y" style="width:' + U.pct(n.yes, t) + '%"></i><i class="a" style="width:' + U.pct(n.almost, t) + '%"></i><i class="n" style="width:' + U.pct(n.no, t) + '%"></i></div><small>YES ' + n.yes + ' · ALMOST ' + n.almost + ' · NOT YET ' + n.no + '</small></li>';
+            return '<li><span class="gtag g-' + g.k + '">' + esc(g.short) + '</span> ' + esc(g.text) + '<div class="stack"><i class="y" style="width:' + U.pct(n.yes, t) + '%"></i><i class="a" style="width:' + U.pct(n.almost, t) + '%"></i><i class="n" style="width:' + U.pct(n.no, t) + '%"></i></div><small>YES ' + n.yes + ' · ALMOST ' + n.almost + ' · NOT YET ' + n.no + '</small></li>';
           }).join("");
-          $("#gl").innerHTML = '<ol class="pgoals rated">' + rows + '</ol><p class="pnote" style="margin:.4em 0 0">' + rec + ' of ' + L.length + ' pairs remembered 2 or 3 goals from memory.</p>';
-        } else $("#gl").innerHTML = '<p class="pq" style="font-size:1.4em">From memory first — do not look!</p><p class="pnote">' + typed + ' of ' + L.length + ' pairs have typed their goals.</p>';
+          const mem = k => '<span><span class="gtag g-' + k + '">' + (k === "sci" ? "Science" : "Thinking") + '</span> from memory: <b>' + got(k) + '</b> of ' + L.length + ' pairs got it</span>';
+          $("#gl").innerHTML = '<div class="pmem">' + mem("sci") + mem("think") + '</div><ul class="pgoals rated labelled">' + rows + '</ul>';
+        } else $("#gl").innerHTML = '<p class="pq" style="font-size:1.4em">From memory first — do not look!</p><p style="margin:0 0 .4em">Write our <span class="gtag g-sci">Science</span> goal and our <span class="gtag g-think">Thinking</span> goal on your laptop.</p><p class="pnote">' + typed + ' of ' + L.length + ' pairs have checked their answers.</p>';
         $("#nx").textContent = D.reflect.next;
       };
     }
@@ -241,9 +243,14 @@
     if (top.dataset.key === key) return; top.dataset.key = key;
     top.className = "ptop ph-" + s.phase.toLowerCase();
     top.innerHTML = running
-      ? '<span class="pchip">' + esc(s.phase) + '</span><div class="pname"><small>Screen ' + n + ' of 9</small>' + esc(s.name) + '</div><div class="pdots">' + D.screens.map(x => '<i class="' + (x.n === n ? "on" : x.n < n ? "done" : "") + '"></i>').join("") + '</div><div class="ptimer" id="ptm"></div>'
+      ? '<span class="pchip">' + esc(s.phase) + '</span><div class="pname"><small>Screen ' + n + ' of 9</small>' + esc(s.name) + '</div><div class="pgoalbar" id="pgoals" title="Our goals — measured on the screens we have finished"></div><div class="ptimer" id="ptm"></div>'
       : '<div class="pname"><small>Grade 6 · Natural Science · Lesson 6</small>' + esc(D.title) + '</div><div class="ptimer" id="ptm"></div>';
-    tickTimer();
+    tickTimer(); paintGoalBar();
+  }
+  function paintGoalBar() {
+    const box = $("#pgoals"); if (!box) return;
+    const h = E.goals({ state: ST, pairs: PAIRS, events: EVENTS }).map(g => '<div class="pgm g-' + g.k + '"><span>' + esc(g.short) + '<em>' + (g.pct == null ? "–" : g.pct + "%") + '</em></span><i><b style="width:' + (g.pct || 0) + '%"></b></i></div>').join("");
+    if (box.dataset.h !== h) { box.dataset.h = h; box.innerHTML = h; }
   }
   function tickTimer() {
     const t = $("#ptm"); if (!t) return;
@@ -267,6 +274,8 @@
     box.innerHTML = '<div><div class="k">★ ' + esc(sp.kind || "Spotlight") + '</div><div class="tx">' + esc(sp.text) + '</div><div class="by">Station ' + esc(sp.st) + (sp.names ? " · " + esc(sp.names) : "") + '</div></div>';
     box.hidden = false;
   }
+  $("#spot").addEventListener("click", () => { $("#spot").hidden = true; });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") $("#spot").hidden = true; });
   function paintStage() {
     const mode = !ST.reset ? "none" : ST.live === false ? "ended" : !ST.startedAt ? "before" : "s" + (ST.screen || 1);
     const key = mode + ":" + (ST.reset || "");
@@ -288,7 +297,8 @@
 
   all();
   LS.watchState(s => { ST = s || {}; all(); });
-  LS.watchPairs(v => { PAIRS = v || {}; later("stage", paintStage, 250); later("bot", paintBot, 300); });
+  LS.watchEvents(v => { EVENTS = v || {}; later("goalbar", paintGoalBar, 300); });
+  LS.watchPairs(v => { PAIRS = v || {}; later("stage", paintStage, 250); later("bot", paintBot, 300); later("goalbar", paintGoalBar, 800); });
   LS.watchQuestions(v => { QS = v || {}; later("stage", paintStage, 200); });
   LS.watchVotes(v => { VOTES = v || {}; later("stage", paintStage, 200); });
   LS.watchMeter(v => { METER = v || {}; later("stage", paintStage, 100); });

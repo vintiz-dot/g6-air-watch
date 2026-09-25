@@ -132,14 +132,13 @@ table.six th{background:var(--soft);font-size:12px}
 
 /* ════════════ teacher view ════════════ */
 body.teach #shell{max-width:none;padding:12px 12px 70px}
-/* laptop cockpit: three columns that scroll on their own, so the pairs never leave the screen */
-@media (min-width:1281px){
-  body.teach{height:100vh;overflow:hidden;display:flex;flex-direction:column}
-  body.teach #bar{position:relative;flex:none}
-  body.teach #shell{flex:1;min-height:0;padding:10px 12px 0}
-  body.teach #app,body.teach .tgrid{height:100%}
-  body.teach .tgrid > div{height:100%;overflow-y:auto;overscroll-behavior:contain;padding:0 4px 58px 0;scrollbar-width:thin}
-}
+/* laptop cockpit (switched on by the page once it has measured the window): three columns that
+   scroll on their own, so the pairs never leave the screen. Without it the page simply scrolls. */
+body.teach #shell{margin:0}
+body.teach.cockpit{height:100vh;overflow:hidden}
+body.teach.cockpit #shell{padding:10px 12px 0;width:100%}
+body.teach.cockpit .tgrid > div{height:var(--colH,80vh);overflow-y:auto;overscroll-behavior:contain;padding:0 4px 58px 0;scrollbar-width:thin}
+
 body.teach #bar{gap:14px}
 .tclock{display:flex;align-items:baseline;gap:6px;color:#CFE4EE;font-size:13px;white-space:nowrap}
 .tclock b{font-family:var(--display);font-size:22px;color:#fff;font-variant-numeric:tabular-nums}
@@ -148,6 +147,7 @@ body.teach #bar{gap:14px}
 .projbadge{font-size:12px;font-weight:700;border-radius:999px;padding:4px 10px;background:#1A4C66;color:#CFE4EE;white-space:nowrap}
 .projbadge.ok{background:#1D5B43;color:#C9F2DE}
 .projbadge.late{background:#7A2A1D;color:#FFD9CF}
+.barbtn.spotoff{background:#C8871B;color:#1B1200}
 .barbtn{background:#1A4C66;color:#fff;border:0;border-radius:10px;padding:7px 11px;font-weight:700;font-size:13px}
 .tgrid{display:grid;grid-template-columns:330px minmax(0,1fr) 340px;gap:12px;align-items:start}
 @media (max-width:1280px){.tgrid{grid-template-columns:310px minmax(0,1fr)}.tgrid .tright{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}}
@@ -391,3 +391,54 @@ body.obs #shell{max-width:1500px;padding:12px 14px 70px}
 .feed{list-style:none;margin:0;padding:0;max-height:320px;overflow:auto}
 .feed li{border-bottom:1px solid var(--line);padding:6px 0;font-size:14px}
 .feed li small{display:block;color:var(--muted);font-size:11px;font-weight:600}
+
+/* ════════════ the three goals ════════════ */
+:root{--g-sci:#1C7293;--g-lang:#A86B12;--g-think:#7B2FA0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--g-sci:#5BA6C4;--g-lang:#E0A93F;--g-think:#C792E6}}
+:root[data-theme="dark"]{--g-sci:#5BA6C4;--g-lang:#E0A93F;--g-think:#C792E6}
+.gtag{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:700;letter-spacing:.04em;color:#fff;background:var(--g-sci);vertical-align:1px;white-space:nowrap}
+.gtag.g-lang{background:var(--g-lang)} .gtag.g-think{background:var(--g-think)}
+.gtag.sm{font-size:11px;padding:0 7px}
+.gtags{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:2px 0 6px}
+.gtags .vn{font-size:12px;margin-right:2px}
+.glist{list-style:none;margin:6px 0 0;padding:0}
+.glist li{margin:5px 0;line-height:1.45}
+.raterow.recall{background:var(--soft);border-radius:10px;padding:10px 12px;margin-top:10px;border-top:0}
+.resume{border-color:var(--green);background:var(--okBg);color:var(--okInk)}
+.runlbl{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
+.navrow{display:flex;gap:8px;margin-top:8px}
+.navrow .bigbtn{margin-top:0;flex:1}
+.navrow #backBtn{flex:none;white-space:nowrap}
+.goalrow{padding:5px 0}
+.gtop{display:flex;justify-content:space-between;align-items:center}
+.gpct{font-family:var(--display);font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
+.gbar{height:9px;background:var(--soft);border-radius:999px;overflow:hidden;margin:4px 0 2px}
+.gbar i{display:block;height:100%;border-radius:999px;background:var(--muted)}
+.gmeta{font-size:12px;color:var(--muted)}
+.gdet{margin-top:6px;font-size:13px}
+.gdet summary{cursor:pointer;font-weight:600;color:var(--muted)}
+.gck{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--line);font-size:12px}
+.gck.later{opacity:.5}
+.gck.live b{color:var(--teal)}
+.pair .pg{display:flex;gap:4px;flex-wrap:wrap}
+/* projector: goal meters in the top bar */
+.pgoalbar{display:flex;gap:.8em;align-items:center}
+.pgm{display:flex;flex-direction:column;gap:.15em;min-width:6.2em}
+.pgm span{font-size:.55em;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#CFE4EE;display:flex;justify-content:space-between;gap:.5em}
+.pgm em{font-style:normal;color:#fff}
+.pgm i{display:block;height:.42em;border-radius:999px;background:rgba(255,255,255,.18);overflow:hidden}
+.pgm i b{display:block;height:100%;border-radius:999px}
+.pgm.g-sci i b{background:#5BC0E0} .pgm.g-lang i b{background:#F2B544} .pgm.g-think i b{background:#D59BF0}
+.pgoals.labelled{list-style:none;padding-left:0}
+.pgoals.labelled .gtag{font-size:.62em;padding:.1em .6em;vertical-align:.15em}
+/* projector screen 9: recall result + tighter rated goals */
+.pmem{display:grid;grid-template-columns:1fr 1fr;gap:.5em;margin:0 0 .55em}
+.pmem > span{background:var(--soft);border-radius:.45em;padding:.4em .6em;font-size:.78em;font-weight:600;line-height:1.35}
+.pmem .gtag{font-size:.85em;padding:.08em .55em;margin-right:.2em}
+.pmem b{font-size:1.45em;line-height:1}
+.pgoals.rated{font-size:1em;line-height:1.35}
+/* teacher run sheet, screen 9: what each pair typed from memory */
+.memlist{margin-top:8px}
+.memlist > div{padding:5px 0;border-top:1px solid var(--line);line-height:1.4}
+.memlist > div > b:first-child{display:inline-block;min-width:1.6em;font-weight:700}
+.memlist i{color:var(--muted);font-style:normal;font-weight:600}

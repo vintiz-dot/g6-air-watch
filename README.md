@@ -12,9 +12,9 @@ Two parts, one folder:
 | `homework-teacher.html` | you (PIN) | Every student's week, live. Choose the class station, star sky photos for the lesson, download a CSV. |
 | `check.html` | you | Tests the database (homework and lesson rooms), the air-quality data and the class station. Every red row says what to fix. |
 | `index.html` | pair laptops 1–11 | **The lesson.** Join with station + names, then the 9 screens, following your screen changes. |
-| `teacher.html` | your laptop (PIN) | Runs the lesson: screens and timers, reveals, spotlight, private nudges, student ideas, rule vote, live targets. |
-| `projector.html` | the projector | Class results only: timer, votes, charts, Wonder Wall, spotlight. Opened from `teacher.html`. |
-| `observer.html` | observers’ laptop | Read-only: every pair’s live work, planned vs actual time, and level-4 evidence for the framework. |
+| `teacher.html` | your laptop (PIN) | Runs the lesson: screens and timers, reveals, spotlight, private nudges, student ideas, rule vote, the three goal scores, live targets. |
+| `projector.html` | the projector | Class results only: timer, the three goal scores, votes, charts, Wonder Wall, spotlight. Opened from `teacher.html`. |
+| `observer.html` | observers’ laptop | Read-only: every pair’s live work, the three goals measured as the lesson goes, planned vs actual time, and the evidence for each framework component. |
 
 Teacher PIN: **4826** — change it in `assets/aw-config.js` (`teacherPin`).
 
@@ -109,18 +109,19 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 | Where | Page | What it shows |
 |---|---|---|
 | Laptops 1–11 (one per pair) | `index.html` | Choose the station number on the desk card, then the names (from the homework list). Groups of 1 or 3 work too (“No partner today”, “We are three today”). Pilot and Navigator swap at every screen. |
-| Your laptop screen | `teacher.html` | Three columns: run sheet and controls · every pair live · student voice, targets and log. |
-| Projector (extended display) | `projector.html` | Timer, class results, charts, photo game, Wonder Wall, spotlight. |
-| Laptop 12, back of the room | `observer.html` | Every pair’s work, the lesson map (planned vs actual minutes), level-4 evidence counted live, checks for understanding, an optional talk-time tally. |
+| Your laptop screen | `teacher.html` | Three columns: run sheet and controls · every pair live · goals, student voice, targets and log. On a small screen the page scrolls as one column. |
+| Projector (extended display) | `projector.html` | Timer, the three goal scores (top bar), class results, charts, photo game, Wonder Wall, spotlight. |
+| Laptop 12, back of the room | `observer.html` | Every pair’s work, the three goals measured check by check, the lesson map (planned vs actual minutes), the evidence for each framework component counted live, checks for understanding, an optional talk-time tally. |
 
 ### The day before (15 minutes)
 
 1. Upload the new files to the same GitHub repository (**Add file → Upload files**, drag everything
    in this folder, **Commit**). `assets/firebase-config.js` stays as it is.
 2. Open `check.html` on the **school Wi-Fi**. All rows should be green except “No lesson session yet”.
-3. Rehearse once: `teacher.html` → PIN → **Start a new session**; on a second device open `index.html`,
-   join station 1, press **Bell** and click through a few screens. **Start a new session** again
-   afterwards — it clears the rehearsal.
+3. Rehearse once: `teacher.html` → PIN → **Start a new session**. Open `index.html` in two or three
+   browser tabs (or on other devices) — each tab is its own station, so you can join stations 1, 2 and 3
+   and send three rules on screen 7. Press **Bell** and click through the screens. **Start a new
+   session** again afterwards — it clears the rehearsal.
 
 ### Before the bell (from 9:30)
 
@@ -135,24 +136,34 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 
 ### During the lesson
 
-- **Next →** opens the next screen on every laptop, with its timer. The run sheet shows your script for
-  that screen and a planned cut (**If you are behind**).
+- **Next →** opens the next screen on every laptop, with its timer; **← Back** reopens the one before.
+  The run sheet shows the reveal buttons first, then your script for that screen and a planned cut
+  (**If you are behind**).
 - The badge at the top says when the lesson will finish if you keep every remaining timer. It turns red
   and says how much to cut if you are heading past 45:00.
 - **Reveal** buttons show answers on the laptops and the projector. **★ Spotlight** puts a pair’s
-  sentence on the projector (they see “Your work is on the board!”). **Nudge** sends a private message
-  to one laptop. **✓ Helped** clears a help request.
+  sentence on the projector (they see “Your work is on the board!”); **✕ End spotlight** in the top bar,
+  **Esc**, or a click on the projector takes it off. **Nudge** sends a private message to one laptop.
+  **✓ Helped** clears a help request.
+- **Goals** (right column): the class score for the Science, Language and Thinking goals, from the
+  screens already finished, plus the screen you are on. Open **Every check** to see what is counted.
+  Green is 80% or more. The projector’s top bar shows the same three scores.
 - Screen 7: tick up to three rules → **Put the ticked rules to the vote** → **Close the vote** makes the
   winner the class rule.
-- Keys: **N** next screen · **P** pause/resume · **+** one more minute · **Esc** clear the spotlight.
+- Screen 9: pairs type the science goal and the thinking goal from memory, press **Check our answers**,
+  and mark each one got it / partly / missed it; the run sheet lists what each pair typed. Then press
+  **Show the goals and self-ratings on the board**.
+- Keys: **N** next screen · **B** back · **P** pause/resume · **+** one more minute · **Esc** end the spotlight.
 
 ### If something goes wrong
 
 - **A laptop loses Wi-Fi:** its work stays on the laptop. After 20 seconds it shows Back / Next so the
   pair can follow you; it sends everything when the Wi-Fi returns.
-- **A laptop reloads or crashes:** reopen `index.html` — the laptop remembers the station, the names and the answers.
+- **A laptop reloads:** it carries on where it was.
+- **A browser closes or crashes:** reopen `index.html` and press **Continue as Station N** (or join again
+  with the same station and names) — the answers come back.
 - **Your laptop crashes:** reopen `teacher.html`. The lesson carries on where it was; nothing is lost.
 - **Two laptops choose the same station:** the teacher view shows a warning on both cards.
 - **Never press “Start a new session” during the lesson** — it clears every answer (it asks twice).
 
-Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-23b.
+Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-24.

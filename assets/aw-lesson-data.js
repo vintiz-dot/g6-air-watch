@@ -5,11 +5,17 @@ window.LESSON = {
   title: "Air Pollution & AQI",
   sub: "Grade 6 · Lesson 6 · E11 · Wednesday 30 September, 9:40–10:25",
   bigQ: "The air looks clear. Is it clean? How would we know?",
-  criteria: [
-    "I can explain why “looks clear” isn’t “is clean”, using a number as evidence.",
-    "I can say what the AQI is made of and what it hides.",
-    "I can plan a fair way to measure air quality: where, when, how often, compared with what."
+  /* three goals, measured screen by screen (see goalChecks in aw-evidence.js) */
+  goals: [
+    { k: "sci",   label: "Science goal",  short: "Science",
+      text: "I can explain why clear-looking air can still be polluted, and what the AQI is made of." },
+    { k: "lang",  label: "Language goal", short: "Language",
+      text: "I can use the key words (pollutant, emission, PM2.5, AQI) and report a number with its source: “___ tells us that ___.”" },
+    { k: "think", label: "Thinking goal", short: "Thinking",
+      text: "I can use evidence to test an idea, and plan a fair way to measure: where, when, how often, compared with what." }
   ],
+  /* which goals each screen works on (shown on every laptop) */
+  screenGoals: { 1: ["think"], 2: ["think"], 3: ["sci", "lang"], 4: ["sci", "lang"], 5: ["sci", "lang", "think"], 6: ["sci", "lang", "think"], 7: ["think"], 8: ["think", "lang"], 9: ["sci", "lang", "think"] },
 
   /* 9 screens · minutes add up to 44 + 1 minute to close = 45 */
   screens: [
@@ -137,7 +143,7 @@ window.LESSON = {
 
   /* teacher run sheet — one card per screen */
   script: {
-    1: ["Silent for 90 seconds — the screen is the instruction.", "At 0:02: Navigator of Pair 1 reads the three criteria aloud.", "Say once: “At the end you will judge yourselves against these three.”"],
+    1: ["Silent for 90 seconds — the screen is the instruction.", "At 0:02: Navigator of Pair 1 reads the three goals aloud — science, language, thinking.", "Say once: “At the end you will tell me the science goal and the thinking goal from memory.”"],
     2: ["Press Reveal: the class guess score. Wait 5 seconds. Say nothing.", "Photo game: 60 seconds to vote → Reveal the numbers.", "Ask once: “So — can you tell by looking?” Wait 5 seconds.", "Every pair posts one question. Spotlight two."],
     3: ["Assistants to the bench. Type the room baseline.", "Light the tealight, close the lid, watch the flame die (B11: burning needs oxygen).", "Beam through the smoke. Lift the lid at the meter → type the peak.", "Wait 60 s → type ‘after’. Say: “Looking is not measuring.”", "Book T&W Q3 (p.32): one sentence with the beam or the number."],
     4: ["Sort: 60 s. “The fog and the smoke looked the same. Which is a pollutant?”", "Rule: 60 s → spotlight the best rule, in their words.", "Terms: 60 s — the Navigator teaches the Pilot.", "Book Q1 + Q2 (p.32): 90 s → Reveal answers.", "Metaphor (30 s): the AQI is a report card — one number from six subjects."],
@@ -145,7 +151,7 @@ window.LESSON = {
     6: ["DBQ1 (p.33) + DBQ2 (p.34): 3½ min → show the bars.", "Name the structure: one cause, one effect.", "T&W Q2 (p.32): 1½ min, with their own number and source."],
     7: ["Write: 1½ min.", "Spotlight three rules. “Would it work for a city you have never been to?”", "Vote: 30 s → class rule.", "10 seconds: “Rule G1 is also true of your exam grades.”", "Book T&W Q1 (p.31)."],
     8: ["Q3 (p.32): 3 min → Reveal A, B, C. The failure sentences for D and E are what you mark.", "Redesign our week: 3 min. “Our numbers disagreed. Design a system where they would not have.”", "Peer check: 2 min. Do not help — count your interventions."],
-    9: ["Re-vote: 30 s → show the before/after shift.", "Cover the criteria with your hand. Goals from memory: 1 min.", "Self-rate with evidence: 1½ min.", "Exit: book T&W Q4 (p.32).", "Launch E12 (p.35, self-assessment p.36)."]
+    9: ["Re-vote: 30 s → show the before/after shift.", "Cover the goals. Pairs type the SCIENCE goal and the THINKING goal from memory: 1 min → they check and mark each one.", "Self-rate all three goals with evidence: 1½ min → show the goals on the board.", "Exit: book T&W Q4 (p.32).", "Launch E12 (p.35, self-assessment p.36)."]
   },
 
   /* if the projected finish passes 45:00 — what to drop on each screen (planned cuts, never the evidence) */
@@ -163,3 +169,4 @@ window.LESSON = {
 
   nudges: ["One minute left — finish this part.", "Swap roles now: the Navigator takes the laptop.", "Use the sentence frame on your screen.", "Read the question aloud to each other, then answer.", "Good — now try the challenge card."]
 };
+window.LESSON.criteria = window.LESSON.goals.map(g => g.text);

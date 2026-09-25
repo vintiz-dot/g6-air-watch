@@ -442,3 +442,35 @@ body.obs #shell{max-width:1500px;padding:12px 14px 70px}
 .memlist > div{padding:5px 0;border-top:1px solid var(--line);line-height:1.4}
 .memlist > div > b:first-child{display:inline-block;min-width:1.6em;font-weight:700}
 .memlist i{color:var(--muted);font-style:normal;font-weight:600}
+/* station records on days a student missed (screen 1), estimates everywhere */
+.mday.filled{opacity:1;background:var(--soft);border-style:dashed}
+.mday.filled em{color:var(--muted)}
+.aqi.est{background:transparent!important;border:2px dashed;color:var(--text)}
+.filledn{margin:4px 0 0;font-size:12px}
+.legend i.ring{background:transparent;border:2px dashed var(--muted);border-radius:50%}
+/* screen 2: questions from home */
+.hwq{display:flex;flex-direction:column;gap:6px;margin:6px 0 2px}
+.hwq .chip{text-align:left}
+/* screen 3: how small is PM2.5 */
+.sizecard img.graph{max-width:620px;width:100%}
+.sizecard ul{margin:6px 0 4px;padding-left:20px}
+.sizecard li{margin:2px 0}
+.credit{font-size:11px;color:var(--muted);margin:2px 0 0}
+.psize{align-items:center;justify-content:center}
+.psize .pimg.big{max-height:none;max-width:100%;width:100%;height:auto;flex:1;min-height:0;object-fit:contain}
+/* screen 6: our week for T&W Q2 */
+.tw2data{overflow-x:auto;margin:8px 0 6px}
+.tw2t{border-collapse:collapse;width:100%;min-width:560px;font-size:13px}
+.tw2t th,.tw2t td{border-bottom:1px solid var(--line);padding:4px 3px;text-align:center;vertical-align:middle}
+.tw2t thead th{font-size:11px;color:var(--muted);font-weight:600}
+.tw2t tbody th{text-align:left;font-weight:500;min-width:110px}
+.tw2t tbody th small{display:block;color:var(--muted);font-size:11px}
+.tw2t td.none{color:var(--muted)}
+.twc{border:1.5px solid transparent;background:transparent;border-radius:8px;padding:2px 3px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:1px;width:100%;color:var(--text)}
+.twc b{display:inline-block;min-width:36px;border-radius:999px;padding:2px 6px;font-size:13px}
+.twc.est b{background:transparent;border:2px dashed}
+.twc small{font-size:9.5px;color:var(--muted);line-height:1.1}
+.twc:hover{border-color:var(--line)}
+.twc.on{border-color:var(--ink);background:var(--soft)}
+.twc.own b{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--ink)}
+.twc.stn b{font-weight:500}

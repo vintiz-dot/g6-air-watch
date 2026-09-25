@@ -40,7 +40,13 @@ window.LESSON = {
     predict1: { q: "When the smoke clears, will the air in the jar be clean?", opts: [["yes", "Yes, clean"], ["no", "No, not clean"], ["cant", "Can't tell"]] },
     predict2: { q: "How high will the PM2.5 number go?", opts: [["low", "Low (under 50)"], ["mid", "Middle (50–150)"], ["high", "High (over 150)"]] },
     frame: ["It looks", "but the meter shows", "so"],
-    bookQ3: { page: 32, text: "3. What evidence is there to prove air pollution?" }
+    bookQ3: { page: 32, text: "3. What evidence is there to prove air pollution?" },
+    /* shown after the teacher's reveal, once the jar looks clear again */
+    size: { title: "Why can’t we see it? How small is PM2.5?", img: "assets/img/pm25-size.webp",
+      alt: "A human hair 50 to 70 micrometres wide next to grains of fine beach sand 90 micrometres wide, a line of PM10 particles under 10 micrometres, and PM2.5 particles under 2.5 micrometres — far thinner than the hair.",
+      lines: ["A human hair is about 50–70 micrometres (µm) wide.", "A PM2.5 particle is 2.5 µm or smaller — about 30 times thinner than a hair.", "Our eyes cannot see one particle that small. The meter can."],
+      vn: "Bụi mịn PM2.5 nhỏ hơn sợi tóc khoảng 30 lần — mắt thường không nhìn thấy được.",
+      credit: "Image: U.S. Environmental Protection Agency (EPA)" }
   },
 
   focus: {
@@ -133,9 +139,9 @@ window.LESSON = {
     1: "Look at both weeks. Which day do you think had heavy traffic? What in the data tells you?",
     2: "A photo can show fog. Can a photo ever show PM2.5? Why or why not?",
     3: "The candle smoke was an emission. Name two emissions near our school.",
-    4: "Carbon dioxide is not one of the six AQI parts. Is it a pollutant? Use your rule.",
+    4: "Loud noise is not a substance. Can it still be called “pollution”? Use your rule to decide.",
     5: "Two stations both show AQI 120. Could their air still be different? How?",
-    6: "The Mauna Loa graph goes up and down every year like a saw. What could make it go down every year?",
+    6: "Carbon dioxide is not one of the six AQI parts. Is it a pollutant? Use your rule from screen 4.",
     7: "Find something that breaks your rule. Then fix the rule.",
     8: "Your plan costs money. Which ONE part would you keep if you could only afford one?",
     9: "What would you need to measure next week to answer your own ‘I wonder’ question?"
@@ -144,11 +150,11 @@ window.LESSON = {
   /* teacher run sheet — one card per screen */
   script: {
     1: ["Silent for 90 seconds — the screen is the instruction.", "At 0:02: Navigator of Pair 1 reads the three goals aloud — science, language, thinking.", "Say once: “At the end you will tell me the science goal and the thinking goal from memory.”"],
-    2: ["Press Reveal: the class guess score. Wait 5 seconds. Say nothing.", "Photo game: 60 seconds to vote → Reveal the numbers.", "Ask once: “So — can you tell by looking?” Wait 5 seconds.", "Every pair posts one question. Spotlight two."],
-    3: ["Assistants to the bench. Type the room baseline.", "Light the tealight, close the lid, watch the flame die (B11: burning needs oxygen).", "Beam through the smoke. Lift the lid at the meter → type the peak.", "Wait 60 s → type ‘after’. Say: “Looking is not measuring.”", "Book T&W Q3 (p.32): one sentence with the beam or the number."],
+    2: ["Press Reveal: the class guess score. Wait 5 seconds. Say nothing.", "Photo game: 60 seconds to vote → Reveal the numbers.", "Ask once: “So — can you tell by looking?” Wait 5 seconds.", "Every pair posts one question — they start from the questions they wrote at home. Spotlight two."],
+    3: ["Assistants to the bench. Type the room baseline.", "Light the tealight, close the lid, watch the flame die (B11: burning needs oxygen).", "Beam through the smoke. Lift the lid at the meter → type the peak.", "Wait 60 s → type ‘after’. Say: “Looking is not measuring.”", "Reveal the size picture (20 s): “A hair is 50–70 micrometres. PM2.5 is 2.5 or less — 30 times thinner. Your eyes cannot see one.”", "Book T&W Q3 (p.32): one sentence with the beam or the number."],
     4: ["Sort: 60 s. “The fog and the smoke looked the same. Which is a pollutant?”", "Rule: 60 s → spotlight the best rule, in their words.", "Terms: 60 s — the Navigator teaches the Pilot.", "Book Q1 + Q2 (p.32): 90 s → Reveal answers.", "Metaphor (30 s): the AQI is a report card — one number from six subjects."],
     5: ["AQI made of: 2½ min → show the total / average / biggest split.", "Time or place: 2½ min → show the charts.", "Ask once: “Is a different number always a wrong number?” Wait 5 s.", "Check the trap: “AQI went from 60 to 180 — did air QUALITY go up or down?”"],
-    6: ["DBQ1 (p.33) + DBQ2 (p.34): 3½ min → show the bars.", "Name the structure: one cause, one effect.", "T&W Q2 (p.32): 1½ min, with their own number and source."],
+    6: ["DBQ1 (p.33) + DBQ2 (p.34): 3½ min → show the bars.", "Name the structure: one cause, one effect.", "T&W Q2 (p.32): 1½ min — their week is on the laptop: tap a number, then finish “so the air was ___”."],
     7: ["Write: 1½ min.", "Spotlight three rules. “Would it work for a city you have never been to?”", "Vote: 30 s → class rule.", "10 seconds: “Rule G1 is also true of your exam grades.”", "Book T&W Q1 (p.31)."],
     8: ["Q3 (p.32): 3 min → Reveal A, B, C. The failure sentences for D and E are what you mark.", "Redesign our week: 3 min. “Our numbers disagreed. Design a system where they would not have.”", "Peer check: 2 min. Do not help — count your interventions."],
     9: ["Re-vote: 30 s → show the before/after shift.", "Cover the goals. Pairs type the SCIENCE goal and the THINKING goal from memory: 1 min → they check and mark each one.", "Self-rate all three goals with evidence: 1½ min → show the goals on the board.", "Exit: book T&W Q4 (p.32).", "Launch E12 (p.35, self-assessment p.36)."]

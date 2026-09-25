@@ -3,7 +3,7 @@
    and (later) the E11 lesson app. Edit values here only.
    ───────────────────────────────────────────────────────────── */
 window.AW = {
-  build: "2026-09-24",
+  build: "2026-09-25",
 
   /* Firebase rooms (same g6-science project as the Materials Bench) */
   room: "G6HW6",          // the 7-day homework log

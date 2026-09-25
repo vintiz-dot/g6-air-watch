@@ -1,0 +1,40 @@
+# Air Watch — saves every chosen station's reading at all three times of day,
+# even when no homework page is open. Times are Hanoi (UTC+7); GitHub may start a run a few minutes late.
+# This file must live in .github/workflows/ — GitHub only runs workflows from there.
+# To test it now: GitHub → Actions → "Air Watch station readings" → Run workflow.
+name: Air Watch station readings
+
+on:
+  schedule:
+    - cron: "50 23 * * *"   # 06:50 morning window
+    - cron: "15 0 * * *"    # 07:15 morning (second try)
+    - cron: "50 9 * * *"    # 16:50 after-school window
+    - cron: "15 10 * * *"   # 17:15 after school (second try)
+    - cron: "20 12 * * *"   # 19:20 evening window
+    - cron: "45 12 * * *"   # 19:45 evening (second try)
+    - cron: "40 13 * * *"   # 20:40 fill the day's gaps with estimates
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "all = save readings if inside a time window, then fill gaps · fill = only fill gaps"
+        type: choice
+        options: [all, fill]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: air-watch-readings
+  cancel-in-progress: false
+
+jobs:
+  readings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node tools/air-watch-readings.mjs ${{ github.event.inputs.mode || 'all' }}

@@ -8,15 +8,15 @@ Two parts, one folder:
 
 | Page | Who | What it does |
 |---|---|---|
-| `homework.html` | students | The daily log: look and guess first, then check the station, then note what was happening. About 3 minutes a day. |
-| `homework-teacher.html` | you (PIN) | Every student's week, live. Choose the class station, star sky photos for the lesson, download a CSV. |
+| `homework.html` | students | The daily log: look and guess first, then check the station, then note what was happening. About 3 minutes a day. Plus **My question** for the lesson, and **Find my Air Watch** on a new device. |
+| `homework-teacher.html` | you (PIN) | Every student's week, live. Choose the class station, star sky photos, see every station at all three times of day, read the students' questions, join a student's two logs, download CSVs. |
 | `check.html` | you | Tests the database (homework and lesson rooms), the air-quality data and the class station. Every red row says what to fix. |
 | `index.html` | pair laptops 1–11 | **The lesson.** Join with station + names, then the 9 screens, following your screen changes. |
 | `teacher.html` | your laptop (PIN) | Runs the lesson: screens and timers, reveals, spotlight, private nudges, student ideas, rule vote, the three goal scores, live targets. |
 | `projector.html` | the projector | Class results only: timer, the three goal scores, votes, charts, Wonder Wall, spotlight. Opened from `teacher.html`. |
 | `observer.html` | observers’ laptop | Read-only: every pair’s live work, the three goals measured as the lesson goes, planned vs actual time, and the evidence for each framework component. |
 
-Teacher PIN: **4826** — change it in `assets/aw-config.js` (`teacherPin`).
+Teacher PIN: the `teacherPin` in `assets/aw-config.js`.
 
 ---
 
@@ -75,7 +75,16 @@ number in the book table (page 34). After Day 7 they look back: how many guesses
 worst day and why — then **Hand in**.
 
 Missed a day? They can catch up; it is saved as **entered late**, with the real time it was typed.
-Changed phone? The **code** at the top of their page moves their week to another device.
+
+**My question.** Under the day, every student writes ONE question for the lesson (with the four
+starters) and can improve it any day. On screen 2 each pair sees both partners' questions and picks one.
+
+**New phone, or the page forgot them?** On the first screen they choose **Find my Air Watch**, type
+their name and class, and tap their own log (it shows their station and days saved). They can also use
+**their own link** (tap *My code* at the top → *Copy my link*) or the 6-letter code. Setting up again
+with the same name and class asks *“Is it yours?”* first, so a student does not end up with two logs.
+If it happens anyway, your page shows **The same student twice?** → **Join** (the other device follows
+by itself).
 
 ---
 
@@ -85,15 +94,46 @@ Changed phone? The **code** at the top of their page moves their week to another
 - The class total: **how many guesses by looking were right** — the number that opens the lesson.
 - Every student's week in one table; tap a row for everything, including photos.
 - **Star** the sky photos you want to use in the lesson's opening (clear-looking sky, high AQI…).
-- **Download all answers (CSV)** — one row per student per day, opens in Excel.
+- **Download all answers (CSV)** — one row per student per day, opens in Excel (now with each question).
+- **Station readings** — every chosen station at 6:30–7:30, 16:30–17:30 and 19:00–20:00, day by day:
+  a filled square is a real reading, a dashed one an estimate. Download them as a CSV too.
+- **Questions for the lesson** — every student's question, by class.
+
+---
+
+## 4b · Every station at all three times
+
+Each student checks once a day, at their own time. So that everyone can compare morning, after school
+and evening at their own station, the readings are filled in for them — **only the station numbers,
+never a guess, a note or a photo**:
+
+1. **In each time window, any open homework page** (a student's or yours) saves every chosen station
+   once. Leave `homework-teacher.html` open on a computer to be safe.
+2. **The GitHub job** does the same at about 6:50, 16:50 and 19:20 even if no page is open
+   (`tools/air-watch-readings.mjs`, started by a workflow file). **To switch it on**, move
+   `tools/air-watch-readings.yml` into the folder `.github/workflows/` (GitHub only runs workflow files
+   from there), then commit and push. On github.com instead: **Add file → Create new file**, name it
+   `.github/workflows/air-watch-readings.yml`, paste the file's text, **Commit**. To test it: GitHub →
+   **Actions** → *Air Watch station readings* → **Run workflow**. The teacher page then shows
+   *GitHub job: last reading …*.
+3. **Readings students typed on time** are shared, so classmates at the same station see them.
+4. **Times nobody measured** (mostly 23–25 September, before this started) get an **estimate** from a
+   computer model — Open-Meteo (CAMS model, CC BY 4.0) — always marked **≈ estimate**. Estimates can be
+   quite different from a station, which is itself a good question for E12.
+
+Students see all three times under each saved day (after they have locked their guess). In the lesson
+they appear on screen 1 (days a student missed, marked *station* or *estimate*), screen 5 (the time and
+place charts) and screen 6 (the table for Talk & Write Q2).
 
 ---
 
 ## 5 · Privacy
 
-Stored: first name, class, the area they typed, their readings and optional sky photos. No other
-personal data. Photos must show the sky only. After E12, download the CSV, then use
-**Clear the whole homework room** at the bottom of the teacher page (it asks three times).
+Stored: first name, class, the area they typed, their readings, their question and optional sky photos.
+No other personal data. To let students find their log again, a short list of names, classes, station
+names and days saved (`roster`) can be read by the homework page. Station readings hold no names. Photos must show the sky only. After E12, download the CSV, then use
+**Clear the whole homework room** at the bottom of the teacher page (it asks three times) — it also
+clears the roster and the station readings.
 
 The lesson room (`G6W6`) stores station numbers, first names and the pairs’ answers. The projector
 shows names only on a spotlight you choose; the observers’ page shows names (staff only). The
@@ -115,8 +155,8 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 
 ### The day before (15 minutes)
 
-1. Upload the new files to the same GitHub repository (**Add file → Upload files**, drag everything
-   in this folder, **Commit**). `assets/firebase-config.js` stays as it is.
+1. Commit and push the new files to the same GitHub repository (or **Add file → Upload files**, drag
+   everything in this folder, **Commit**). `assets/firebase-config.js` stays as it is.
 2. Open `check.html` on the **school Wi-Fi**. All rows should be green except “No lesson session yet”.
 3. Rehearse once: `teacher.html` → PIN → **Start a new session**. Open `index.html` in two or three
    browser tabs (or on other devices) — each tab is its own station, so you can join stations 1, 2 and 3
@@ -148,6 +188,11 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 - **Goals** (right column): the class score for the Science, Language and Thinking goals, from the
   screens already finished, plus the screen you are on. Open **Every check** to see what is counted.
   Green is 80% or more. The projector’s top bar shows the same three scores.
+- Screen 2: each pair sees the questions both partners wrote at home and picks one to post.
+- Screen 3: after “60 seconds later”, press **Show how small PM2.5 is** — the EPA hair-and-sand picture
+  appears on the laptops and the projector.
+- Screen 6: the laptops show the pair’s whole week (and the class station); tapping a number fills
+  “___ tells us that the AQI was ___ on ___”.
 - Screen 7: tick up to three rules → **Put the ticked rules to the vote** → **Close the vote** makes the
   winner the class rule.
 - Screen 9: pairs type the science goal and the thinking goal from memory, press **Check our answers**,
@@ -166,4 +211,4 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 - **Two laptops choose the same station:** the teacher view shows a warning on both cards.
 - **Never press “Start a new session” during the lesson** — it clears every answer (it asks twice).
 
-Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-24.
+Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-25. PM2.5 size picture: U.S. EPA (public domain).

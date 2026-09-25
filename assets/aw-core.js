@@ -127,6 +127,9 @@
     watchHomework: fn => on(() => H("students"), fn, {}),
     watchHomeworkConfig: fn => on(() => H("config"), fn, {}),
     watchPhotoFlags: fn => on(() => H("photoFlags"), fn, {}),
+    /* station readings at all three times (saved by the homework pages / GitHub job) and estimates */
+    watchStationLog: fn => on(() => H("stationLog"), fn, {}),
+    watchStationEst: fn => on(() => H("stationEst"), fn, {}),
     getPhoto: (code, day) => boot() ? H("photos/" + code + "_" + day).once("value").then(s => s.val()).catch(() => null) : Promise.resolve(null)
   };
 
@@ -165,6 +168,29 @@
       return { aqi: d.a.aqi, six: d.six, date: d.date };
     },
     photoAqi(students, code, day) { const s = (students || {})[code]; const d = s && s.days && s.days[day]; return d && d.a ? d.a.aqi : null; },
+    /* a station's number for one day and time window: the station record, a classmate's reading, or an estimate */
+    stationCell(log, est, uid, date, slot) { return (window.AWST && uid) ? window.AWST.cell(log, est, uid, date, slot) : null; },
+    /* screen 5 — time: the class station at all three times; place: every home station over the same windows */
+    timePlace(students, log, est, cfg) {
+      const S = window.AWST, cs = cfg && cfg.classStation;
+      const has = S && log && Object.keys(log).length;
+      if (!has) return { pts: HW.classPoints(students), slots: HW.bySlot(HW.classPoints(students)), sts: HW.byStation(students), fromLog: false, estN: 0, realN: 0 };
+      const ds = S.dates(C.day1 || "2026-09-23", C.days || 7), now = Date.now(), pts = [];
+      let estN = 0, realN = 0;
+      if (cs && cs.uid) ds.forEach((d, i) => S.SLOTS.forEach(sl => {
+        if (!S.ended(d, sl, now)) return;
+        const x = S.cell(log, est, cs.uid, d, sl.k); if (!x) return;
+        pts.push({ day: i + 1, slot: sl.k, aqi: x.aqi, est: x.src === "est" }); if (x.src === "est") estN++; else realN++;
+      }));
+      const byName = {};
+      HW.list(students).forEach(s => { if (s.st && s.st.uid && s.st.name && !(cs && String(cs.uid) === String(s.st.uid))) byName[s.st.name] = s.st.uid; });
+      const sts = Object.keys(byName).map(name => {
+        const v = []; let e = 0;
+        ds.forEach(d => S.SLOTS.forEach(sl => { if (!S.ended(d, sl, now)) return; const x = S.cell(log, est, byName[name], d, sl.k); if (x) { v.push(x.aqi); if (x.src === "est") e++; } }));
+        return v.length ? { name, n: v.length, est: e, avg: Math.round(v.reduce((a, b) => a + b, 0) / v.length), min: Math.min(...v), max: Math.max(...v) } : null;
+      }).filter(Boolean).sort((a, b) => b.avg - a.avg);
+      return { pts, slots: HW.bySlot(pts), sts, fromLog: true, estN, realN };
+    },
     guessOf(students, code, day) { const s = (students || {})[code]; const d = s && s.days && s.days[day]; return d && d.g ? d.g : null; }
   };
 
@@ -222,7 +248,11 @@
       let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Class station AQI by day and time">';
       [50, 100, 150, 200].filter(v => v < maxA).forEach(v => { s += '<line x1="' + l + '" x2="' + (W - r) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (l - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="' + fs + '" fill="var(--muted)">' + v + '</text>'; });
       for (let d = 1; d <= 7; d++) s += '<text x="' + x(d) + '" y="' + (H - 12) + '" text-anchor="middle" font-size="' + fs + '" fill="var(--muted)">Day ' + d + '</text>';
-      points.forEach((p, i) => { const jitter = ((i * 37) % 11 - 5) * 2.2; s += '<circle cx="' + (x(p.day) + jitter) + '" cy="' + y(p.aqi) + '" r="' + (opts.r || 6) + '" fill="' + (col[p.slot] || "#888") + '" fill-opacity=".85"/>'; });
+      points.forEach((p, i) => {
+        const jitter = p.slot === "am" ? -9 : p.slot === "eve" ? 9 : (p.slot === "pm" ? 0 : ((i * 37) % 11 - 5) * 2.2), c = col[p.slot] || "#888", r = opts.r || 6;
+        s += p.est ? '<circle cx="' + (x(p.day) + jitter) + '" cy="' + y(p.aqi) + '" r="' + (r - 1) + '" fill="none" stroke="' + c + '" stroke-width="2.5" stroke-dasharray="3 2"/>'
+          : '<circle cx="' + (x(p.day) + jitter) + '" cy="' + y(p.aqi) + '" r="' + r + '" fill="' + c + '" fill-opacity=".9"/>';
+      });
       return s + "</svg>";
     }
   };

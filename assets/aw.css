@@ -135,3 +135,28 @@ a.btn{text-decoration:none;display:inline-block}
 .checkrow b{display:block}
 .checkrow small{color:var(--muted)}
 code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:14px}
+
+/* ── find my log · all three times · my question (added 2026-09-25) ── */
+.findrow .me{flex:none;border-radius:999px;padding:5px 12px;font-weight:700;font-size:13px;background:var(--ink);color:var(--card)}
+.findrow:disabled{opacity:.6}
+.alltimes{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:12px 0 4px;background:var(--soft)}
+.alltimes > b{font-size:15px}
+.atrow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin-top:8px}
+.atrow .atn{flex:1 0 100%;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.atc{flex:1 1 90px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 8px;min-width:0}
+.atc i{font-style:normal;font-size:12px;color:var(--muted);font-weight:600}
+.atc small{font-size:11px;color:var(--muted)}
+.atc.mine{border:2px solid var(--ink)}
+.atc.est .aqi{background:transparent;border:2px dashed;color:var(--text)}
+.atc.none b{color:var(--muted);font-size:15px;padding:3px 2px}
+/* teacher homework page: station coverage, questions, duplicates */
+.stcov td,.stcov th{white-space:nowrap}
+.stcov th small{font-weight:500;color:var(--muted)}
+.dots{letter-spacing:0}
+.dots i,p.vn i.dr,p.vn i.de,p.vn i.d0{display:inline-block;width:11px;height:11px;border-radius:3px;margin:0 1px;vertical-align:-1px}
+.dots i.d0,p.vn i.d0{background:var(--soft);border:1px solid var(--line)}
+.dots i.de,p.vn i.de{border:2px dashed;background:transparent}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;background:var(--soft);color:var(--muted)}
+.qlist{margin:6px 0 0;padding-left:22px}
+.qlist li{margin:0 0 8px}
+.duprow{display:flex;gap:12px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:10px 0;font-size:14px}

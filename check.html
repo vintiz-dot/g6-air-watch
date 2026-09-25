@@ -23,6 +23,7 @@
 <script src="assets/firebase-config.js"></script>
 <script src="assets/aw-waqi.js"></script>
 <script src="assets/aw-sync.js"></script>
+<script src="assets/aw-stations.js"></script>
 <script>
 (function(){
   const $ = s => document.querySelector(s);
@@ -53,6 +54,22 @@
     } catch(e){
       wq.querySelector(".s").className = "s bad"; wq.querySelector("b").textContent = "Air quality data: not reachable";
       wq.querySelector("small").textContent = (e && e.message ? e.message : e) + " — check the token in assets/aw-config.js, or whether this network blocks api.waqi.info. Students can still type their station name by hand.";
+    }
+    /* station readings at all three times (homework pages, teacher page, GitHub job) */
+    const sr = add("warn", "Station readings: writing and reading back…", "stationLog, roster");
+    try {
+      const sdb = AWSYNC.stationDb(); if (!sdb) throw new Error("the database did not start");
+      const stamp = Date.now();
+      await sdb.set("stationLog/_check", { at: stamp }); await sdb.set("roster/_check", { at: stamp });
+      const a = await sdb.get("stationLog/_check"), b = await sdb.get("roster/_check");
+      if (!a || a.at !== stamp || !b || b.at !== stamp) throw new Error("wrote but could not read back");
+      await sdb.set("stationLog/_check", null); await sdb.set("roster/_check", null);
+      const n = Object.keys((await sdb.get("stationMeta")) || {}).length, at = await sdb.get("stationEstAt");
+      sr.querySelector(".s").className = "s ok"; sr.querySelector("b").textContent = "Station readings: write and read back OK";
+      sr.querySelector("small").textContent = n + " stations known · estimates " + (at ? "refreshed " + new Date(at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "not made yet") + ". Open the teacher homework page to see every station at all three times.";
+    } catch (e) {
+      sr.querySelector(".s").className = "s bad"; sr.querySelector("b").textContent = "Station readings: not working";
+      sr.querySelector("small").textContent = (e && e.message ? e.message : e) + " — the Realtime Database rules must allow writing to rooms/" + esc(AWSYNC.room) + "/stationLog, stationEst, stationMeta, roster and moved.";
     }
     /* the lesson room (30 September) */
     const LR = "rooms/" + (C.lessonRoom || "G6W6");

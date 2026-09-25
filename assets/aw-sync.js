@@ -90,12 +90,47 @@
     },
     clearAll() {
       if (!boot()) return Promise.resolve(false);
-      return Promise.all([ref("students").remove(), ref("photos").remove(), ref("photoFlags").remove()])
+      return Promise.all(["students", "photos", "photoFlags", "roster", "moved", "stationLog", "stationEst", "stationMeta", "stationEstAt"].map(k => ref(k).remove()))
         .then(() => true).catch(e => { fail("could not clear the room", e); return false; });
     },
     removeStudent(code) {
       if (!boot()) return Promise.resolve(false);
-      return Promise.all([ref("students/" + code).remove()]).then(() => true).catch(e => { fail("could not remove", e); return false; });
+      return Promise.all([ref("students/" + code).remove(), ref("roster/" + code).remove()]).then(() => true).catch(e => { fail("could not remove", e); return false; });
+    },
+
+    /* ---- any path in the room: station readings, roster, moved logs ---- */
+    getPath(p) {
+      if (!boot()) return Promise.resolve(null);
+      return ref(p).once("value").then(s => s.val()).catch(() => null);
+    },
+    setPath(p, v) {
+      if (!boot()) return Promise.resolve(false);
+      return ref(p).set(v === undefined ? null : clean(v)).then(() => true).catch(e => { fail("could not save", e); return false; });
+    },
+    updatePath(p, v) {
+      if (!boot()) return Promise.resolve(false);
+      return ref(p).update(clean(v)).then(() => true).catch(e => { fail("could not save", e); return false; });
+    },
+    watchPath(p, fn) {
+      if (!boot()) { fn(null); return; }
+      try { ref(p).on("value", s => fn(s.val())); } catch (e) { fn(null); }
+    },
+    /* when two logs are joined, their sky photos move with the days */
+    copyPhotos(from, to, days) {
+      if (!boot()) return Promise.resolve(0);
+      return Promise.all((days || []).map(d => ref("photos/" + from + "_" + d).once("value").then(s => {
+        const v = s.val(); if (!v) return 0;
+        return ref("photos/" + to + "_" + d).set(Object.assign({}, v, { code: to })).then(() => 1);
+      }).catch(() => 0))).then(r => r.reduce((a, b) => a + b, 0));
+    },
+    /* the small database interface that aw-stations.js expects */
+    stationDb() {
+      if (!boot()) return null;
+      return {
+        get: p => ref(p).once("value").then(s => s.val()),
+        set: (p, v) => ref(p).set(v),
+        update: (p, v) => ref(p).update(v)
+      };
     },
 
     /* ---- check page ---- */

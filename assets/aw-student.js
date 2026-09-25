@@ -34,6 +34,9 @@
   const sameNames = (x, y) => x.map(v => txt(v).toLowerCase()).sort().join("|") === y.map(v => txt(v).toLowerCase()).sort().join("|");
 
   let ST = {}, HOMEWORK = {}, PAIRS = {}, METER = {}, VOTES = {}, FEEDBACK = {}, SUGG = {};
+  let SLOG = {}, SEST = {}, HWCFG = {};
+  const dayDate = i => window.AWST ? window.AWST.dates(C.day1, C.days)[i - 1] : null;
+  const shortDate = iso => { const p = String(iso).split("-").map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }); };
   let shown = 0, offline = false, offlineScreen = 1;
   let connected = null, lostAt = 0;
   const A = n => (P.a["s" + n] = P.a["s" + n] || {});
@@ -228,28 +231,39 @@
     const s = HOMEWORK[code];
     if (!s) return '<p class="vn">No Air Watch found for this name — use your partner’s week.</p>';
     const days = {}; HW.days(s).forEach(d => { days[d.n] = d; });
-    let h = '<div class="mini">';
+    let h = '<div class="mini">', filled = 0;
     for (let i = 1; i <= 7; i++) {
       const d = days[i];
-      if (!d) { h += '<button class="mday" disabled><i>Day ' + i + '</i><span>–</span></button>'; continue; }
+      if (!d) {
+        const x = s.st && s.st.uid && s.slot ? HW.stationCell(SLOG, SEST, s.st.uid, dayDate(i), s.slot) : null;
+        if (x) {
+          const c = CAT(x.aqi), est = x.src === "est"; filled++;
+          h += '<button class="mday filled" disabled title="' + (est ? "Estimate from a computer model" : "Station record — not logged by you") + '"><i>Day ' + i + '</i><span class="aqi' + (est ? ' est' : '') + '" style="' + (est ? 'border-color:' + c.col : 'background:' + c.col + ';color:' + c.ink) + '">' + (est ? "≈" : "") + x.aqi + '</span><em>' + (est ? "estimate" : "station") + '</em></button>';
+          continue;
+        }
+        h += '<button class="mday" disabled><i>Day ' + i + '</i><span>–</span></button>'; continue;
+      }
       const c = CAT(d.a.aqi), right = c && d.g && d.g.guess === c.k;
       h += '<button class="mday" data-code="' + esc(code) + '" data-day="' + i + '"><i>Day ' + i + '</i><span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + d.a.aqi + '</span><em>' + (right ? "eyes ✓" : "eyes ✗") + '</em></button>';
     }
-    return h + '</div>';
+    return h + '</div>' + (filled ? '<p class="vn filledn">Grey days: not logged — the number is the station’s (≈ = estimate). No guess, so no ✓ or ✗.</p>' : '');
   }
 
+  let bindWeek = () => {}, repaintWeek = () => {};
   const SCREENS = {
     1(n, box) {
       const a = A(n);
       box.innerHTML = header(n) + '<p class="sub">Silent start. Look at ' + (P.names.length === 1 ? "your week" : P.names.length === 3 ? "all three of your weeks" : "both of your weeks") + '.</p>';
       P.names.forEach((nm, i) => {
-        const w = el("div", "weekcard", '<b>' + esc(nm) + '</b>' + (P.codes[i] ? weekStrip(P.codes[i]) : '<p class="vn">No Air Watch for this name' + (P.codes.some(Boolean) ? " — use your partner’s week." : " — skip to question 3.") + '</p>'));
+        const w = el("div", "weekcard", '<b>' + esc(nm) + '</b>' + (P.codes[i] ? '<div class="wk" data-code="' + esc(P.codes[i]) + '">' + weekStrip(P.codes[i]) + '</div>' : '<p class="vn">No Air Watch for this name' + (P.codes.some(Boolean) ? " — use your partner’s week." : " — skip to question 3.") + '</p>'));
         box.appendChild(w);
       });
       const t = el("div", "task", '<h3>1 · Tap your worst day (the highest number).</h3><p class="vn" id="worstTxt"></p><h3>2 · Were your eyes right on that day?</h3>');
       box.appendChild(t);
       const paintW = () => { const x = a.worst; $("#worstTxt").textContent = x ? ("You chose " + (P.names[P.codes.indexOf(x.code)] || "") + ", Day " + x.day + ".") : "Tap a day above."; box.querySelectorAll(".mday").forEach(b => b.classList.toggle("on", !!x && b.dataset.code === x.code && +b.dataset.day === x.day)); };
-      box.querySelectorAll(".mday[data-day]").forEach(b => b.onclick = () => { a.worst = { code: b.dataset.code, day: +b.dataset.day }; saveAns(n); paintW(); });
+      bindWeek = () => box.querySelectorAll(".mday[data-day]").forEach(b => b.onclick = () => { a.worst = { code: b.dataset.code, day: +b.dataset.day }; saveAns(n); paintW(); });
+      repaintWeek = () => { box.querySelectorAll(".wk[data-code]").forEach(wk => { wk.innerHTML = weekStrip(wk.dataset.code); }); bindWeek(); paintW(); };
+      bindWeek();
       t.appendChild(chips([["yes", "Yes"], ["no", "No"]], a.eyes, k => { a.eyes = k; saveAns(n); }));
       paintW();
       const v = el("div", "task", '<h3>3 · ' + esc(D.vote.q) + '</h3><p class="vn">' + esc(D.vote.vn) + '</p>');
@@ -267,8 +281,15 @@
       box.appendChild(el("div", "task", '<div id="gscore"></div>'));
       const game = el("div", "task", '<h3>Which sky had the worst air?</h3><p class="vn">These are photos from our class this week. Vote first — then your teacher shows the numbers.</p><div class="pgame" id="pgame"></div>');
       box.appendChild(game);
-      const q = el("div", "task", '<h3>Your question</h3><p class="vn">Write one question you have now. Start with one of these:</p><div id="starters"></div><textarea id="qtxt" rows="2" maxlength="200" placeholder="Our question…"></textarea><div class="btns"><button class="btn" id="qpost">Post our question</button></div><div id="qdone" class="vn"></div>');
+      const hq = P.codes.map((c, i) => ({ nm: P.names[i], q: c && HOMEWORK[c] && HOMEWORK[c].q ? txt(HOMEWORK[c].q.t) : "", st: c && HOMEWORK[c] && HOMEWORK[c].q ? HOMEWORK[c].q.st : "" })).filter(x => x.q.length >= 4);
+      const q = el("div", "task", '<h3>Your question</h3>' + (hq.length ? '<p class="vn">You wrote these at home. Choose one, then make it better together — or write a new one.</p><div class="hwq" id="hwq"></div><p class="vn" style="margin-top:8px">Question starters:</p>' : '<p class="vn">Write one question you have now. Start with one of these:</p>') +
+        '<div id="starters"></div><textarea id="qtxt" rows="2" maxlength="200" placeholder="Our question…"></textarea><div class="btns"><button class="btn" id="qpost">Post our question</button></div><div id="qdone" class="vn"></div>');
       box.appendChild(q);
+      hq.forEach(x => {
+        const b = el("button", "chip wide" + (a.q === x.q ? " on" : ""), '<b>' + esc(x.nm) + ':</b> ' + esc(x.q)); b.type = "button";
+        b.onclick = () => { a.q = x.q; a.qFrom = "home"; if (x.st) a.qStarter = x.st; $("#qtxt").value = x.q; saveAns(n); q.querySelectorAll("#hwq .chip").forEach(y => y.classList.toggle("on", y === b)); $("#qtxt").focus(); };
+        q.querySelector("#hwq").appendChild(b);
+      });
       q.querySelector("#starters").appendChild(chips(D.starters.map(s => [s, s]), a.qStarter, k => { a.qStarter = k; const t = $("#qtxt"); if (!txt(t.value)) { t.value = k.replace("…", " "); a.q = t.value; } t.focus(); saveAns(n); }));
       const qt = $("#qtxt"); qt.value = a.q || ""; qt.oninput = () => { a.q = qt.value; saveAns(n); };
       $("#qpost").onclick = () => {
@@ -290,6 +311,7 @@
       p.appendChild(chips(D.jar.predict2.opts, a.p2, k => { a.p2 = k; saveAns(n, true); }));
       box.appendChild(p);
       box.appendChild(el("div", "task", '<h3>Observe</h3><div id="meter" class="meter"></div>'));
+      box.appendChild(el("div", "", '<div id="sizeCard"></div>'));
       const ex = el("div", "task", '<h3>Explain</h3>');
       ex.appendChild(frameInputs(n, "ex", D.jar.frame, 3));
       box.appendChild(ex);
@@ -416,9 +438,10 @@
       const w2 = el("input"); w2.placeholder = "Why is C tempting, but not shown by the graph?"; w2.value = a.d2.why || ""; w2.oninput = () => { a.d2.why = w2.value; saveAns(n); }; t2.appendChild(w2);
       t2.appendChild(el("div", "", '<div id="dbqKey"></div>'));
       box.appendChild(t2);
-      const tw = el("div", "task", bookBox(D.inv2.tw2.page, D.inv2.tw2.text, '<p class="vn">Use one number from your own week. Write it in your book too.</p>'));
+      const tw = el("div", "task", bookBox(D.inv2.tw2.page, D.inv2.tw2.text, '<p class="vn">Use one number from your own week. Tap a number below — then finish the sentence. Write it in your book too.</p>'));
       const st0 = P.codes[0] && HOMEWORK[P.codes[0]] && HOMEWORK[P.codes[0]].st ? HOMEWORK[P.codes[0]].st.name : "Our station";
       if (!a.tw2[0]) a.tw2[0] = st0;
+      tw.appendChild(el("div", "", '<div id="tw2data" class="tw2data"></div>'));
       tw.appendChild(frameInputs(n, "tw2", ["", D.inv2.tw2.frame[0], D.inv2.tw2.frame[1], D.inv2.tw2.frame[2]], 4));
       tw.appendChild(tick(n, "book", "We wrote it in our books"));
       box.appendChild(tw);
@@ -566,7 +589,14 @@
     }
     photos.forEach((p, i) => { const q = $("#phq" + i); if (!q) return; const aq = HW.photoAqi(HOMEWORK, p.code, p.day); q.innerHTML = (ST.reveal && ST.reveal.photos && aq != null) ? U.catChip(aq) : ""; });
   }
+  function paintSize() {
+    const b = $("#sizeCard"); if (!b) return;
+    const on = !!(ST.reveal && ST.reveal.size), z = D.jar.size;
+    if (b.dataset.on === String(on)) return; b.dataset.on = String(on);
+    b.innerHTML = on ? '<div class="task sizecard"><h3>' + esc(z.title) + '</h3><img class="graph" src="' + esc(z.img) + '" alt="' + esc(z.alt) + '"><ul>' + z.lines.map(l => '<li>' + esc(l) + '</li>').join("") + '</ul><p class="vn">' + esc(z.vn) + '</p><p class="credit">' + esc(z.credit) + '</p></div>' : "";
+  }
   function paintMeter() {
+    paintSize();
     const m = $("#meter"); if (!m) return;
     const v = k => (METER[k] != null && METER[k] !== "") ? METER[k] : "–";
     m.innerHTML = '<div><span>Room air</span><b>' + v("base") + '</b></div><div><span>Smoke at the meter</span><b>' + v("peak") + '</b></div><div><span>60 s later — looks clear</span><b>' + v("after") + '</b></div><p class="vn">PM2.5 in micrograms per cubic metre (µg/m³)</p>';
@@ -587,14 +617,51 @@
   }
   function paint5() {
     const tp = $("#tp"); if (!tp) return;
-    const pts = HW.classPoints(HOMEWORK), slots = HW.bySlot(pts), sts = HW.byStation(HOMEWORK);
+    const tpd = HW.timePlace(HOMEWORK, SLOG, SEST, HWCFG), pts = tpd.pts, slots = tpd.slots, sts = tpd.sts;
     if (!pts.length && !sts.length) { tp.innerHTML = '<p class="vn">No class data yet.</p>'; return; }
-    tp.innerHTML = '<div class="two-charts"><div><b>One place (class station), different times</b>' + CH.dots(pts) +
-      '<p class="legend"><i style="background:#1C7293"></i>Morning <i style="background:#C8871B"></i>After school <i style="background:#7B2FA0"></i>Evening</p>' +
+    const key = JSON.stringify([pts.length, sts.map(x => x.avg), tpd.estN]);
+    if (tp.dataset.key === key) return; tp.dataset.key = key;
+    tp.innerHTML = '<div class="two-charts"><div><b>One place (class station), three times a day</b>' + CH.dots(pts) +
+      '<p class="legend"><i style="background:#1C7293"></i>Morning <i style="background:#C8871B"></i>After school <i style="background:#7B2FA0"></i>Evening' + (tpd.estN ? ' <i class="ring"></i>estimate' : '') + '</p>' +
       '<p class="vn">' + slots.filter(s => s.n).map(s => esc(s.label) + ": average " + s.avg).join(" · ") + '</p></div>' +
-      '<div><b>Different places (our stations), whole week</b>' + CH.bars(sts.slice(0, 8).map(s => ({ label: s.name.length > 18 ? s.name.slice(0, 17) + "…" : s.name, v: s.avg, col: (CAT(s.avg) || {}).col })), { label: "Average AQI by station" }) + '</div></div>';
+      '<div><b>Different places (our stations), ' + (tpd.fromLog ? 'same times of day' : 'whole week') + '</b>' + CH.bars(sts.slice(0, 8).map(s => ({ label: s.name.length > 18 ? s.name.slice(0, 17) + "…" : s.name, v: s.avg, col: (CAT(s.avg) || {}).col })), { label: "Average AQI by station" }) +
+      (tpd.fromLog ? '<p class="vn">Each station: the same morning, after-school and evening times.' + (tpd.estN || sts.some(x => x.est) ? ' Some numbers are estimates (≈).' : '') + '</p>' : '') + '</div></div>';
+  }
+  /* our week for Talk & Write Q2: each partner's station at their own time, and the class station */
+  function paintTw2() {
+    const box = $("#tw2data"); if (!box) return;
+    const rows = [];
+    P.codes.forEach((c, i) => {
+      const s = c && HOMEWORK[c]; if (!s || !s.st || !s.st.name) return;
+      const own = {}; HW.days(s).forEach(d => { own[d.n] = d; });
+      rows.push({ who: P.names[i], name: s.st.name, time: ((C.slots || []).find(x => x.k === s.slot) || {}).en || "", cells: [1, 2, 3, 4, 5, 6, 7].map(i2 => {
+        const d = own[i2]; if (d && d.a && d.a.aqi != null) return { aqi: d.a.aqi, src: "own" };
+        return s.st.uid && s.slot ? HW.stationCell(SLOG, SEST, s.st.uid, dayDate(i2), s.slot) : null;
+      }) });
+    });
+    const cs = HWCFG.classStation;
+    if (cs && cs.uid && window.AWST) rows.push({ who: "Class station", name: cs.name, time: "after school", cells: [1, 2, 3, 4, 5, 6, 7].map(i2 => HW.stationCell(SLOG, SEST, cs.uid, dayDate(i2), "pm")) });
+    const key = JSON.stringify(rows.map(r => r.cells.map(x => x && x.aqi)));
+    if (box.dataset.key === key) return; box.dataset.key = key;
+    if (!rows.length) { box.innerHTML = '<p class="vn">No homework data found for your names — use the class station on the board.</p>'; return; }
+    box.innerHTML = '<table class="tw2t"><thead><tr><th></th>' + [1, 2, 3, 4, 5, 6, 7].map(i2 => '<th>' + esc(shortDate(dayDate(i2) || "")) + '</th>').join("") + '</tr></thead><tbody>' +
+      rows.map((r, ri) => '<tr><th><b>' + esc(r.who) + '</b><small>' + esc(r.name) + (r.time ? ' · ' + esc(r.time.split(",")[0].toLowerCase()) : '') + '</small></th>' + r.cells.map((x, di) => {
+        if (!x) return '<td class="none">–</td>';
+        const c = CAT(x.aqi), est = x.src === "est";
+        return '<td><button type="button" class="twc' + (est ? ' est' : x.src === "own" ? ' own' : ' stn') + '" data-r="' + ri + '" data-d="' + (di + 1) + '" title="' + esc((c ? c.en : "") + (est ? " — estimate" : x.src === "own" ? " — your reading" : " — station record")) + '"><b style="' + (est ? 'border-color:' + c.col : 'background:' + c.col + ';color:' + c.ink) + '">' + (est ? "≈" : "") + x.aqi + '</b><small>' + esc(c ? c.en : "") + '</small></button></td>';
+      }).join("") + '</tr>').join("") + '</tbody></table><p class="vn">Ringed = your own reading · plain = the station’s record · ≈ = estimate. The word under each number is the AQI band (book p.31).</p>';
+    box.querySelectorAll(".twc").forEach(b => b.onclick = () => {
+      const r = rows[+b.dataset.r], d = +b.dataset.d, x = r.cells[d - 1]; if (!x) return;
+      const a = A(6); a.tw2 = a.tw2 || [];
+      a.tw2[0] = r.name; a.tw2[1] = String(x.aqi); a.tw2[2] = new Date(dayDate(d) + "T12:00:00Z").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }); a.tw2Src = x.src;
+      const ins = b.closest(".task").querySelectorAll(".frame input");
+      [0, 1, 2].forEach(i => { if (ins[i]) ins[i].value = a.tw2[i]; });
+      saveAns(6); box.querySelectorAll(".twc").forEach(y => y.classList.toggle("on", y === b));
+      if (ins[3]) ins[3].focus();
+    });
   }
   function paint6() {
+    paintTw2();
     const k = $("#dbqKey"); if (!k) return;
     k.innerHTML = (ST.reveal && ST.reveal.dbq) ? '<div class="ok">Data question 1: <b>B</b> (effect) and <b>D</b> (cause). Data question 2: <b>A</b>.</div>' : "";
   }
@@ -660,7 +727,7 @@
     const i = el("input"); i.placeholder = "One thing we will change in our plan…"; i.value = a.change || ""; i.oninput = () => { a.change = i.value; saveAns(9); };
     b.appendChild(i);
   }
-  function repaintLive() { const n = screenNow(); if (n === 2) paint2(); if (n === 3) paintMeter(); if (n === 4) paint4(); if (n === 5) paint5(); if (n === 6) paint6(); if (n === 7) paint7(); if (n === 8) paint8(); if (n === 9) paint9(); }
+  function repaintLive() { const n = screenNow(); if (n === 1) repaintWeek(); if (n === 2) paint2(); if (n === 3) paintMeter(); if (n === 4) paint4(); if (n === 5) paint5(); if (n === 6) paint6(); if (n === 7) paint7(); if (n === 8) paint8(); if (n === 9) paint9(); }
 
   /* ───────── dock: help, ideas, goals ───────── */
   function setupDock() {
@@ -739,6 +806,10 @@
       if (sp && sp.pid === P.pid && sp.at && sp.at > (P.lastSpot || 0) && joined()) { P.lastSpot = sp.at; saveLocal(); toast("★ Your work is on the board!", 6000); }
     });
     LS.watchHomework(v => { HOMEWORK = v || {}; if (!joined()) renderJoin(); else repaintLive(); });
+    let slT = null; const slLater = () => { clearTimeout(slT); slT = setTimeout(() => { if (joined()) { const n = screenNow(); if (n === 1) repaintWeek(); if (n === 5) paint5(); if (n === 6) paintTw2(); } }, 400); };
+    LS.watchStationLog(v => { SLOG = v || {}; slLater(); });
+    LS.watchStationEst(v => { SEST = v || {}; slLater(); });
+    LS.watchHomeworkConfig(v => { HWCFG = v || {}; slLater(); });
     LS.watchPairs(v => {
       PAIRS = v || {};
       const me = PAIRS[P.pid];

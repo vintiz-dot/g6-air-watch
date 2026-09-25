@@ -6,7 +6,7 @@
   const { $, esc } = U;
   const C = window.AW, D = window.LESSON, CAT = window.AW_CAT, E = window.AWE;
   const NST = C.stations || 11;
-  let ST = {}, PAIRS = {}, QS = {}, VOTES = {}, METER = {}, HOMEWORK = {}, HWCFG = {}, FB = {}, EVENTS = {};
+  let ST = {}, PAIRS = {}, QS = {}, VOTES = {}, METER = {}, HOMEWORK = {}, HWCFG = {}, FB = {}, EVENTS = {}, SLOG = {}, SEST = {};
   let builtKey = null, upd = null, aqNow = null, aqUid = null;
   const photoSrc = {};
   const rev = k => !!(ST.reveal && ST.reveal[k]);
@@ -101,16 +101,22 @@
     },
 
     s3(stg) {
-      stg.innerHTML = '<div class="pcard"><h3>Predict → Observe → Explain <small>PM2.5 at the jar, micrograms per cubic metre (µg/m³)</small></h3><div class="pmeter" id="pm"></div></div>' +
-        '<div class="pgrid2"><div class="pcard"><h3>Our predictions <small id="pdn"></small></h3><div id="pd"></div></div>' +
+      stg.innerHTML = '<div class="pcard"><h3>Predict → Observe → Explain <small>PM2.5 at the jar, micrograms per cubic metre (µg/m³)</small></h3><div class="pmeter" id="pm"></div></div><div id="s3b" style="display:contents"></div>';
+      const z = D.jar.size;
+      const lower = () => '<div class="pgrid2"><div class="pcard"><h3>Our predictions <small id="pdn"></small></h3><div id="pd"></div></div>' +
         '<div class="pcard"><h3>Explain</h3><div class="pframe">It looks ____ but the meter shows ____ so ____</div><p class="pnote" style="margin-top:.6em">Book page ' + D.jar.bookQ3.page + ' — ' + esc(D.jar.bookQ3.text) + '</p></div></div>';
+      const sizeView = () => '<div class="pgrid2" style="grid-template-columns:1.35fr 1fr"><div class="pcard psize"><img class="pimg big" src="' + esc(z.img) + '" alt="' + esc(z.alt) + '"><p class="pnote" style="margin:.2em 0 0">' + esc(z.credit) + '</p></div>' +
+        '<div class="pcard"><h3>' + esc(z.title) + '</h3><ul class="pgoals">' + z.lines.map(l => '<li>' + esc(l) + '</li>').join("") + '</ul><p class="pnote" style="margin-top:auto">' + esc(z.vn) + '</p></div></div>';
       return () => {
+        const sb = $("#s3b"), sz = rev("size") ? "size" : "pred";
+        if (sb.dataset.v !== sz) { sb.dataset.v = sz; sb.innerHTML = sz === "size" ? sizeView() : lower(); }
         const has = k => METER[k] != null && METER[k] !== "", v = k => has(k) ? esc(METER[k]) : "–";
         const x = (a, b) => has(a) && has(b) && +METER[b] > 0 && isFinite(+METER[a]) ? +METER[a] / +METER[b] : null;
         const rp = x("peak", "base"), ra = x("after", "base");
         $("#pm").innerHTML = '<div><span>Room air</span><b>' + v("base") + '</b><em>before</em></div>' +
           '<div class="' + (has("peak") ? "x" : "") + '"><span>Smoke at the meter</span><b>' + v("peak") + '</b><em>' + (rp && rp >= 2 ? Math.round(rp) + " × the room air" : "&nbsp;") + '</em></div>' +
           '<div><span>60 seconds later</span><b>' + v("after") + '</b><em>' + (ra && ra >= 1.5 ? "looks clear — still " + (Math.round(ra * 10) / 10) + " × the room air" : "looks clear") + '</em></div>';
+        if (sz === "size") return;
         const n1 = answered(3, a => a.p1), N = pairsL().length;
         $("#pdn").textContent = n1 + " of " + N + " pairs predicted";
         $("#pd").innerHTML = rev("pred")
@@ -149,14 +155,14 @@
         const yn = [["yes", "Yes"], ["no", "No"], ["cant", "Can’t tell"]];
         const t = tally(5, a => a.time && a.time.yn, yn).rows, p = tally(5, a => a.place && a.place.yn, yn).rows;
         $("#tpq").innerHTML = '<p class="pnote" style="margin:0">Does TIME change it?</p>' + bars(t, false, "sm") + '<p class="pnote" style="margin:.3em 0 0">Does PLACE change it?</p>' + bars(p, false, "sm");
-        const k = JSON.stringify([HW.readings(HOMEWORK), Object.keys(HOMEWORK).length]);
+        const tpd = HW.timePlace(HOMEWORK, SLOG, SEST, HWCFG), pts = tpd.pts, sts = tpd.sts;
+        const k = JSON.stringify([pts.map(x => x.aqi), sts.map(x => x.avg), tpd.estN]);
         const tpc = $("#tpc");
         if (tpc.dataset.key !== k) {
           tpc.dataset.key = k;
-          const pts = HW.classPoints(HOMEWORK), sts = HW.byStation(HOMEWORK);
-          tpc.innerHTML = (pts.length || sts.length) ? '<div class="pcols" style="grid-template-columns:1fr 1fr"><div><p class="pnote" style="margin:0">Class station: every dot is one reading</p>' + CH.dots(pts, { w: 440, h: 300, fs: 16, r: 7 }) +
-            '<p class="legend"><i style="background:#1C7293"></i>Morning <i style="background:#C8871B"></i>After school <i style="background:#7B2FA0"></i>Evening</p></div>' +
-            '<div><p class="pnote" style="margin:0">Our stations: average AQI for the week</p>' + CH.bars(sts.slice(0, 7).map(s => ({ label: short(s.name.replace(/^Hanoi:\s*/, ""), 16), v: s.avg, col: (CAT(s.avg) || {}).col })), { label: "Average AQI by station", w: 440, rowH: 42, pad: 150, fs: 18 }) + '</div></div>'
+          tpc.innerHTML = (pts.length || sts.length) ? '<div class="pcols" style="grid-template-columns:1fr 1fr"><div><p class="pnote" style="margin:0">Class station: morning, after school and evening, every day</p>' + CH.dots(pts, { w: 440, h: 300, fs: 16, r: 7 }) +
+            '<p class="legend"><i style="background:#1C7293"></i>Morning <i style="background:#C8871B"></i>After school <i style="background:#7B2FA0"></i>Evening' + (tpd.estN ? ' <i class="ring"></i>estimate' : '') + '</p></div>' +
+            '<div><p class="pnote" style="margin:0">Our stations: average AQI' + (tpd.fromLog ? ' at the same times of day' : ' for the week') + '</p>' + CH.bars(sts.slice(0, 7).map(s => ({ label: short(s.name.replace(/^Hanoi:\s*/, ""), 16), v: s.avg, col: (CAT(s.avg) || {}).col })), { label: "Average AQI by station", w: 440, rowH: 42, pad: 150, fs: 18 }) + '</div></div>'
             : '<p class="pnote">No homework data yet.</p>';
         }
       };
@@ -304,5 +310,7 @@
   LS.watchMeter(v => { METER = v || {}; later("stage", paintStage, 100); });
   LS.watchFeedback(v => { FB = v || {}; later("stage", paintStage, 300); });
   LS.watchHomework(v => { HOMEWORK = v || {}; later("stage", paintStage, 300); });
+  LS.watchStationLog(v => { SLOG = v || {}; later("stage", paintStage, 400); });
+  LS.watchStationEst(v => { SEST = v || {}; later("stage", paintStage, 400); });
   LS.watchHomeworkConfig(v => { HWCFG = v || {}; const uid = HWCFG.classStation && HWCFG.classStation.uid; if (uid !== aqUid) { aqUid = uid; pollAqi(); } });
 })();

@@ -250,7 +250,7 @@
     const ctl = $("#ctl"), rev = el("div", "rev");
     const add = (k, l) => rev.appendChild(revealBtn(k, l));
     if (n === 2) { add("guess", "Reveal the guess score"); add("photos", "Reveal the photo numbers"); }
-    if (n === 3) add("pred", "Show the class predictions");
+    if (n === 3) { add("pred", "Show the class predictions"); add("size", "Show how small PM2.5 is"); }
     if (n === 4) { add("sort", "Reveal the sort answers"); add("q1q2", "Reveal Q1, Q2 & language answers"); }
     if (n === 6) add("dbq", "Reveal the DBQ answers");
     if (n === 8) add("q3", "Reveal the Q3 answer");

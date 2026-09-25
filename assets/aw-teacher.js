@@ -4,6 +4,7 @@
   const C = window.AW, CAT = window.AW_CAT, CATS = window.AW_CATS, PARTS = window.AW_PARTS;
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+  const txt = v => String(v == null ? "" : v).trim();
   function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
   const SKY = { clear: "Clear", hazy: "Hazy", foggy: "Foggy", rainy: "Rainy", dark: "Dark" };
   const WHAT = { rain: "Rain", wind: "Strong wind", sun: "Hot and sunny", traffic: "Heavy traffic", build: "Construction", smoke: "Smoke / burning smell", incense: "Incense / cooking smoke", weekend: "Weekend / holiday", none: "Nothing special" };
@@ -11,6 +12,7 @@
   const catName = k => ((CATS.find(c => c.k === k) || {}).en || "?");
 
   let STUDENTS = {}, CFG = {}, FLAGS = {}, SELECTED = null;
+  let LOG = {}, EST = {}, META = {}, ESTAT = 0, COL = null;
 
   /* ───────── PIN ───────── */
   function gate() {
@@ -41,9 +43,13 @@
       '<div class="btns" style="margin-top:8px"><button class="btn sm" id="loadSt">Load live Hanoi stations</button></div><div id="stMsg" class="vn"></div><div id="stList"></div></div>' +
 
       '<div class="card"><div class="eyebrow">Progress</div><div id="prog"></div></div>' +
+      '<div class="card" id="dupCard" hidden></div>' +
       '<div class="card"><div class="eyebrow">Every student · tap a row for the full week</div><div class="tblwrap" id="tbl"></div>' +
       '<div class="btns"><button class="btn sm" id="csv">Download all answers (CSV)</button><button class="btn sm ghost" id="json">Download a backup (JSON)</button><button class="btn sm ghost" id="clearAll">Clear the whole homework room…</button></div></div>' +
       '<div class="card" id="detail" hidden></div>' +
+      '<div class="card"><div class="eyebrow">Station readings — every chosen station at all three times</div><div id="stRead"></div>' +
+      '<div class="btns"><button class="btn sm" id="estNow">Fill gaps with estimates now</button><button class="btn sm ghost" id="stCsv">Download station readings (CSV)</button></div></div>' +
+      '<div class="card"><div class="eyebrow">Questions for the lesson — written at home</div><div id="qList"></div></div>' +
       '<div class="card"><div class="eyebrow">Sky photos · star the ones to use in class</div><p class="vn">Photos load only when you ask, to keep this page fast.</p><div class="btns" style="margin-top:0"><button class="btn sm" id="loadPh">Load all photos</button></div><div id="phWall" style="margin-top:10px"></div></div>';
 
     $("#copyLink").onclick = () => { const i = $("#stuLink"); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand && document.execCommand("copy"); } $("#copyLink").textContent = "Copied"; };
@@ -59,9 +65,16 @@
       AWSYNC.clearAll().then(ok => { ca.dataset.step = "0"; ca.textContent = ok ? "Cleared" : "Could not clear"; });
     };
 
-    AWSYNC.watchConfig(c => { CFG = c || {}; paintReady(); paintCS(); });
+    AWSYNC.watchConfig(c => { CFG = c || {}; paintReady(); paintCS(); housekeeping(); });
     AWSYNC.watchPhotoFlags(f => { FLAGS = f || {}; paintStars(); });
-    AWSYNC.watchStudents(v => { STUDENTS = v || {}; paintReady(); paintProgress(); paintTable(); if (SELECTED) paintDetail(SELECTED); });
+    AWSYNC.watchStudents(v => { STUDENTS = v || {}; paintReady(); paintProgress(); paintTable(); paintQuestions(); paintDups(); paintStations(); housekeeping(); if (SELECTED) paintDetail(SELECTED); });
+    AWSYNC.watchPath("stationLog", v => { LOG = v || {}; paintStations(); });
+    AWSYNC.watchPath("stationEst", v => { EST = v || {}; paintStations(); });
+    AWSYNC.watchPath("stationMeta", v => { META = v || {}; paintStations(); });
+    AWSYNC.watchPath("stationEstAt", v => { ESTAT = +v || 0; paintStations(); });
+    $("#estNow").onclick = () => runEstimates($("#estNow"));
+    $("#stCsv").onclick = downloadStations;
+    startStationJobs();
     paintReady();
   }
 
@@ -177,6 +190,7 @@
       if (d.six) h += '<tr><td></td><td colspan="10" class="vn">Six parts: ' + PARTS.map(p => esc(p.en) + ' ' + (d.six[p.k] === null ? '–' : d.six[p.k])).join(' · ') + '</td></tr>';
     }
     h += '</tbody></table></div>';
+    if (s.q && txt(s.q.t)) h += '<div class="ok" style="background:var(--soft);color:var(--text)"><b>Question for the lesson:</b> ' + esc(txt(s.q.t)) + '</div>';
     if (s.refl && (s.refl.why || s.refl.look)) h += '<div class="ok" style="background:var(--soft);color:var(--text)"><b>Look back:</b> worst day ' + esc(s.refl.worst || "?") + ' — “' + esc(s.refl.why || "") + '”<br>“' + esc(s.refl.look || "") + '”</div>';
     h += '<div id="dPh" class="pgrid" style="margin-top:10px"></div>' +
       '<div class="btns"><button class="btn sm ghost" id="rm">Remove this student (test entries)</button><button class="btn sm ghost" id="cl">Close</button></div>';
@@ -188,6 +202,133 @@
       if (rm.dataset.arm !== "1") { rm.dataset.arm = "1"; rm.textContent = "Tap again to remove " + (s.n || code); return; }
       AWSYNC.removeStudent(code).then(() => { SELECTED = null; box.hidden = true; });
     };
+  }
+
+  /* ───────── station readings: collect, share classmates' readings, estimate the gaps ───────── */
+  const fetchFn = (u, o) => fetch(u, o);
+  let houseT = null;
+  function housekeeping() {
+    clearTimeout(houseT);
+    houseT = setTimeout(() => {
+      const db = AWSYNC.stationDb(); if (!db || !window.AWST) return;
+      AWST.syncMeta({ db, students: STUDENTS, cfg: CFG })
+        .then(() => AWST.syncRoster({ db, students: STUDENTS }))
+        .then(() => AWST.copyClassmates({ db, students: STUDENTS }))
+        .catch(e => console.warn("[AW] housekeeping", e));
+    }, 1500);
+  }
+  function runCollect() {
+    const db = AWSYNC.stationDb(); if (!db || !window.AWST) return Promise.resolve(null);
+    return AWST.collect({ db, fetch: fetchFn, token: C.waqiToken, after: 30, src: "app", day1: C.day1, days: C.days })
+      .then(r => { if (r && r.slot) { COL = Object.assign({ at: Date.now() }, r); paintStations(); } return r; }).catch(() => null);
+  }
+  function runEstimates(btn) {
+    const db = AWSYNC.stationDb(); if (!db || !window.AWST) return Promise.resolve(null);
+    if (btn) { btn.disabled = true; btn.textContent = "Working…"; }
+    return AWST.estimate({ db, fetch: fetchFn, day1: C.day1, days: C.days }).then(r => {
+      if (btn) { btn.disabled = false; btn.textContent = r.stations ? "Done ✓ — " + r.stations + " stations, " + r.cells + " times" : (r.failed ? "Could not reach the estimate service" : "No station locations yet — try again in a minute"); }
+      return r;
+    }).catch(() => { if (btn) { btn.disabled = false; btn.textContent = "Could not reach the estimate service"; } return null; });
+  }
+  function startStationJobs() {
+    setTimeout(runCollect, 3000);
+    setInterval(runCollect, 3 * 60000);
+    setTimeout(() => { if (Date.now() - ESTAT > 2 * 3600e3) runEstimates(null); }, 6000);
+    setInterval(() => { if (Date.now() - ESTAT > 55 * 60000) runEstimates(null); }, 10 * 60000);
+  }
+  const hhmm = ms => new Date(ms).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  function paintStations() {
+    const box = $("#stRead"); if (!box || !window.AWST) return;
+    const uids = Object.keys(META).map(k => AWST.uidOf(k)).filter(u => /^\d+$/.test(u));
+    const now = Date.now(), win = AWST.nextWindow(now);
+    let gh = 0, app = 0, cls = 0;
+    Object.values(LOG).forEach(byDate => Object.values(byDate || {}).forEach(bySlot => Object.values(bySlot || {}).forEach(r => {
+      if (!r) return; if (r.src === "gh") gh = Math.max(gh, r.at || 0); else if (r.src === "app") app = Math.max(app, r.at || 0); else if (r.src === "class") cls++;
+    })));
+    let h = row(win.open ? "ok" : "warn", win.open ? "Collecting now: " + esc(win.slot.en) + " window" : (win.tomorrow ? "Next window: tomorrow morning, 6:30" : "Next window: " + esc(win.slot.en) + ", " + fmtMin(win.slot.from)),
+      "While this page is open it saves every chosen station once in each window (6:30–7:30, 16:30–17:30, 19:00–20:00). Students’ own pages help too." + (COL ? " Last check " + esc(hhmm(COL.at)) + ": " + COL.saved + " saved, " + COL.had + " already there." : "")) +
+      row(gh ? "ok" : "warn", gh ? "GitHub job: last reading " + esc(hhmm(gh)) : "GitHub job: no readings yet", gh ? "Runs at about 6:50, 16:50 and 19:20 even when no page is open." : "It starts after you push .github/workflows/air-watch-readings.yml — see the README. Until then, pages save readings when they are open.") +
+      row(ESTAT ? "ok" : "warn", ESTAT ? "Estimates refreshed " + esc(hhmm(ESTAT)) : "No estimates yet", "Times nobody measured are filled with a computer-model estimate (Open-Meteo, CAMS model, CC BY 4.0), always marked ≈. " + cls + " readings came from students’ own logs.");
+    if (!uids.length) { box.innerHTML = h + '<p class="vn">No stations yet — they appear when students choose one.</p>'; return; }
+    const ds = AWST.dates(C.day1, C.days);
+    const names = k => (META[k] && META[k].name) || ("Station " + AWST.uidOf(k));
+    const order = Object.keys(META).filter(k => /^s\d+$/.test(k)).sort((a, b) => ((META[b] || {}).cls ? 1 : 0) - ((META[a] || {}).cls ? 1 : 0) || names(a).localeCompare(names(b)));
+    const cov = {}; AWST.coverage(LOG, EST, order.map(AWST.uidOf), C.day1, C.days, now).forEach(c => { cov[c.uid] = c; });
+    let t = '<div class="tblwrap"><table class="tbl stcov"><thead><tr><th>Station</th>' + ds.map((d, i) => '<th title="' + esc(d) + '">D' + (i + 1) + '<br><small>M · A · E</small></th>').join("") + '<th>Real / ≈ / none</th></tr></thead><tbody>';
+    order.forEach(k => {
+      const uid = AWST.uidOf(k), c = cov[uid] || { real: 0, est: 0, none: 0 };
+      const users = Object.values(STUDENTS).filter(s => s.st && String(s.st.uid) === uid).length;
+      t += '<tr><td><b>' + esc(names(k)) + '</b>' + ((META[k] || {}).cls ? ' <span class="tag">class station</span>' : '') + '<br><small class="vn">' + users + (users === 1 ? ' student' : ' students') + ((META[k] || {}).lat == null ? ' · no location yet' : '') + '</small></td>';
+      ds.forEach(d => {
+        t += '<td class="dots">' + AWST.SLOTS.map(sl => {
+          const x = AWST.cell(LOG, EST, uid, d, sl.k);
+          if (!x) return '<i class="d0" title="' + esc(sl.en + ", " + d + ": " + (AWST.ended(d, sl, now) ? "no reading" : "later")) + '"></i>';
+          const cat = CAT(x.aqi);
+          return x.src === "est" ? '<i class="de" style="border-color:' + cat.col + '" title="' + esc(sl.en + ", " + d + ": ≈" + x.aqi + " (estimate)") + '"></i>'
+            : '<i class="dr" style="background:' + cat.col + '" title="' + esc(sl.en + ", " + d + ": " + x.aqi + " (" + (x.src === "class" ? "a student's reading" : "station record") + ")") + '"></i>';
+        }).join("") + '</td>';
+      });
+      t += '<td>' + c.real + ' / ' + c.est + ' / ' + c.none + '</td></tr>';
+    });
+    t += '</tbody></table></div><p class="vn"><i class="dr" style="background:var(--teal)"></i> real reading &nbsp; <i class="de" style="border-color:var(--teal)"></i> estimate &nbsp; <i class="d0"></i> none yet · M = morning, A = after school, E = evening. Students’ guesses, notes and photos are never filled in — only station numbers.</p>';
+    box.innerHTML = h + t;
+  }
+  function fmtMin(m) { return Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0"); }
+  function downloadStations() {
+    const rows = [["station", "station_id", "date", "time_window", "aqi", "pm25", "source", "station_time"]];
+    Object.keys(META).filter(k => /^s\d+$/.test(k)).forEach(k => {
+      const uid = AWST.uidOf(k), nm = (META[k] || {}).name || "";
+      AWST.dates(C.day1, C.days).forEach(d => AWST.SLOTS.forEach(sl => {
+        const x = AWST.cell(LOG, EST, uid, d, sl.k); if (!x) return;
+        rows.push([nm, uid, d, sl.en, x.aqi, x.pm25 == null ? "" : x.pm25, x.src === "est" ? "estimate (Open-Meteo CAMS)" : x.src === "class" ? "student reading" : "station record (aqicn.org)", x.t || ""]);
+      }));
+    });
+    const csv = rows.map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n");
+    download("air-watch-station-readings.csv", "﻿" + csv, "text/csv;charset=utf-8");
+  }
+
+  /* ───────── questions written at home ───────── */
+  function paintQuestions() {
+    const box = $("#qList"); if (!box) return;
+    const L = list(), withQ = L.filter(s => s.q && txt(s.q.t).length >= 4);
+    if (!withQ.length) { box.innerHTML = '<p class="vn">No questions yet. Students write one under “My question” on their homework page; it comes with them to screen 2 of the lesson.</p>'; return; }
+    box.innerHTML = '<p class="vn">' + withQ.length + ' of ' + L.length + ' students have written a question.</p><ol class="qlist">' +
+      withQ.sort((a, b) => String(a.c || "").localeCompare(String(b.c || "")) || String(a.n || "").localeCompare(String(b.n || ""))).map(s => '<li><b>' + esc(s.n) + '</b> <span class="vn">' + esc(s.c) + '</span><br>' + esc(txt(s.q.t)) + '</li>').join("") + '</ol>';
+  }
+
+  /* ───────── the same student twice (a new phone, a cleared browser) ───────── */
+  function paintDups() {
+    const box = $("#dupCard"); if (!box || !window.AWST) return;
+    const groups = AWST.duplicates(STUDENTS);
+    box.hidden = !groups.length;
+    if (!groups.length) { box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="eyebrow">The same student twice?</div><p class="vn" style="margin:0 0 8px">These logs have the same name and class — usually a new phone or a cleared browser. <b>Join</b> keeps every saved day in the first log; the student’s other device switches to it by itself.</p>' +
+      groups.map((g, i) => '<div class="duprow"><div>' + g.map(c => { const s = STUDENTS[c] || {}; return '<b>' + esc(s.n) + '</b> · ' + esc(s.c) + ' · code ' + esc(c) + ' · ' + Object.keys(s.days || {}).filter(k => (s.days || {})[k]).length + ' days · ' + esc(s.st ? s.st.name : "no station") + ' · started ' + (s.created ? esc(hhmm(s.created)) : "?"); }).join("<br>") + '</div><button class="btn sm" data-g="' + i + '">Join</button></div>').join("");
+    box.querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
+      if (b.dataset.arm !== "1") { b.dataset.arm = "1"; b.textContent = "Tap again to join"; return; }
+      b.disabled = true; b.textContent = "Joining…";
+      joinLogs(groups[+b.dataset.g]).then(() => { b.textContent = "Joined ✓"; });
+    });
+  }
+  function joinLogs(codes) {
+    const keep = codes[0], base = STUDENTS[keep] || {};
+    let days = base.days || {};
+    const from = {};
+    codes.slice(1).forEach(c => {
+      const next = AWST.mergeDays(days, (STUDENTS[c] || {}).days || {});
+      Object.keys(next).forEach(k => { if (next[k] !== days[k] && next[k] && next[k].photo) from[k] = c; });
+      days = next;
+    });
+    const others = codes.slice(1).map(c => STUDENTS[c] || {});
+    const merged = Object.assign({}, base, {
+      days, up: Date.now(),
+      q: base.q || (others.find(o => o.q) || {}).q || null,
+      refl: base.refl && (base.refl.why || base.refl.look) ? base.refl : ((others.find(o => o.refl && (o.refl.why || o.refl.look)) || {}).refl || base.refl || {}),
+      sub: !!(base.sub || others.some(o => o.sub)), subAt: Math.max(base.subAt || 0, ...others.map(o => o.subAt || 0))
+    });
+    return AWSYNC.saveStudent(keep, merged)
+      .then(() => Promise.all(Object.keys(from).map(k => AWSYNC.copyPhotos(from[k], keep, [k]))))
+      .then(() => Promise.all(codes.slice(1).map(c => AWSYNC.setPath("moved/" + c, keep).then(() => AWSYNC.removeStudent(c)))));
   }
 
   /* ───────── photos ───────── */
@@ -216,7 +357,7 @@
   /* ───────── export ───────── */
   function downloadCSV() {
     const cols = ["code", "name", "class", "area", "station", "time_slot", "day", "date", "saved_at", "late", "sky", "guess", "aqi", "aqi_band", "guess_right", "pm25", "biggest", "page_updated", "class_aqi", "class_pm25", "happening", "note", "photo",
-      "six_pm25", "six_pm10", "six_o3", "six_no2", "six_so2", "six_co", "handed_in", "worst_day_why", "looking_sentence"];
+      "six_pm25", "six_pm10", "six_o3", "six_no2", "six_so2", "six_co", "handed_in", "worst_day_why", "looking_sentence", "question"];
     const rows = [cols];
     list().forEach(s => {
       for (let i = 1; i <= C.days; i++) {
@@ -225,7 +366,7 @@
         rows.push([s.code, s.n, s.c, s.area, s.st ? s.st.name : "", s.slot, i, d.date, new Date(d.at).toISOString(), d.late ? "yes" : "no", d.g.sky, d.g.guess, d.a.aqi, c ? c.k : "", c && d.g.guess === c.k ? "yes" : "no",
           d.a.pm25 == null ? "" : d.a.pm25, d.a.big, d.a.upd || "", d.ref ? d.ref.aqi : "", d.ref && d.ref.pm25 != null ? d.ref.pm25 : "", (d.what || []).join("|"), d.note || "", d.photo ? "yes" : "no",
           ...(d.six ? PARTS.map(p => d.six[p.k] == null ? "" : d.six[p.k]) : ["", "", "", "", "", ""]),
-          s.sub ? "yes" : "no", s.refl ? s.refl.why || "" : "", s.refl ? s.refl.look || "" : ""]);
+          s.sub ? "yes" : "no", s.refl ? s.refl.why || "" : "", s.refl ? s.refl.look || "" : "", s.q ? txt(s.q.t) : ""]);
       }
     });
     const csv = rows.map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n");

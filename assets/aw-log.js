@@ -33,7 +33,8 @@
   }
 
   /* ───────── state ───────── */
-  const BLANK = { code: "", name: "", cls: "", area: "", slot: "", st: null, days: {}, drafts: {}, thumbs: {}, refl: {}, sub: false, subAt: 0, created: 0, started: false };
+  const BLANK = { code: "", name: "", cls: "", area: "", slot: "", st: null, days: {}, drafts: {}, thumbs: {}, refl: {}, q: null, sub: false, subAt: 0, created: 0, started: false };
+  const STARTERS = ["What would happen if…", "Why does… but not…?", "How could we know…?", "What if we measured…"];
   let S;
   try { S = Object.assign({}, BLANK, JSON.parse(localStorage.getItem(K) || "{}")); } catch (e) { S = Object.assign({}, BLANK); }
   S.days = S.days || {}; S.drafts = S.drafts || {}; S.thumbs = S.thumbs || {}; S.refl = S.refl || {};
@@ -53,13 +54,29 @@
   function payload() {
     return {
       n: txt(S.name), c: txt(S.cls), area: txt(S.area), slot: S.slot || "", st: S.st || null,
-      days: S.days, refl: S.refl, sub: !!S.sub, subAt: S.subAt || 0,
+      days: S.days, refl: S.refl, q: S.q || null, sub: !!S.sub, subAt: S.subAt || 0,
       created: S.created || 0, up: Date.now(), build: C.build
     };
   }
+  let rosterKey = "";
   function push() {
     if (!window.AWSYNC || !AWSYNC.available() || txt(S.name).length < 2) { paintLive(); return Promise.resolve(false); }
-    return AWSYNC.saveStudent(S.code, payload()).then(r => { paintLive(r); return r; });
+    const code = S.code;
+    /* if the teacher joined this log with another one, carry on in that one */
+    return AWSYNC.getPath("moved/" + code).then(to => {
+      if (to && to !== code) { loadCode(to); return false; }
+      const data = payload();
+      return AWSYNC.saveStudent(code, data).then(r => {
+        paintLive(r);
+        if (r && window.AWST) {
+          const e = AWST.rosterEntry(data); delete e.up;
+          const k = JSON.stringify(e);
+          if (k !== rosterKey) { rosterKey = k; quietSet("roster/" + code, Object.assign(e, { up: Date.now() })); }
+          registerStation();
+        }
+        return r;
+      });
+    });
   }
   let lastPushOk = false;
   function paintLive(r) {
@@ -89,8 +106,10 @@
     cc.onclick = () => {
       let n = $("#codeNote");
       if (n) { n.remove(); return; }
-      n = el("div", "note", "Your code is <b>" + esc(S.code) + "</b>. On another phone or computer, open this page and choose <b>Continue with my code</b>. Your week comes with you. · <span>Mã của em là " + esc(S.code) + ".</span>");
+      n = el("div", "note", "Your code is <b>" + esc(S.code) + "</b>. On another phone or computer, open <b>your own link</b> below — or open the homework page, choose <b>Find my Air Watch</b> and type your name. Your week comes with you. · <span>Mã của em là " + esc(S.code) + ".</span>" +
+        '<div class="row2" style="margin-top:8px"><input readonly id="myLink" value="' + esc(myLink()) + '"><div><button class="btn sm" id="copyMy" type="button">Copy my link</button></div></div>');
       n.id = "codeNote"; h.appendChild(n);
+      $("#copyMy").onclick = () => { const i = $("#myLink"); i.select(); try { navigator.clipboard.writeText(i.value); } catch (e) { try { document.execCommand("copy"); } catch (x) {} } $("#copyMy").textContent = "Copied ✓"; };
     };
   }
 
@@ -108,9 +127,21 @@
       w.appendChild(c);
       return;
     }
+    /* already started? find it again by name (or code) */
+    const cont = el("div", "card");
+    cont.innerHTML = '<div class="eyebrow">Already started? · Em đã bắt đầu rồi?</div><h2 style="font-size:22px">Find my Air Watch</h2>' +
+      '<p class="vn" style="margin:4px 0 0">New phone or computer, or this page forgot you? Type your name and class as you did on the first day. · Nhập tên và lớp của em.</p>' +
+      '<div class="row2"><div><label for="fnm">Your name · Tên</label><input id="fnm" autocomplete="name" placeholder="Nguyễn Minh Anh"></div>' +
+      '<div><label for="fcl">Your class · Lớp</label><input id="fcl" placeholder="6H1"></div></div>' +
+      '<div class="btns"><button class="btn" id="findBtn" type="button">Find my Air Watch</button></div><div id="found"></div>' +
+      '<details style="margin-top:12px"><summary>I have my 6-letter code</summary>' +
+      '<div class="row2"><div><label for="cc">Your code · Mã của em</label><input id="cc" maxlength="6" placeholder="K7Q2MX" style="text-transform:uppercase"></div>' +
+      '<div style="align-self:end"><button class="btn ghost" id="ccBtn" type="button">Continue with my code</button></div></div></details><div class="err" id="ccErr"></div>';
+    w.appendChild(cont);
+
     const c = el("div", "card");
     c.innerHTML =
-      '<div class="eyebrow">Start here · Bắt đầu</div><h2 style="font-size:22px">Set up your week (2 minutes)</h2>' +
+      '<div class="eyebrow">New here? Start here · Bắt đầu</div><h2 style="font-size:22px">Set up your week (2 minutes)</h2>' +
       '<p class="vn" style="margin:4px 0 0">You choose ONE station and ONE time, and you keep them for all 7 days. That is what makes your data fair.<br>Chọn MỘT trạm và MỘT giờ, giữ nguyên cả 7 ngày.</p>' +
       '<div class="row2"><div><label for="nm">Your name · Tên</label><input id="nm" autocomplete="name" placeholder="Nguyễn Minh Anh"></div>' +
       '<div><label for="cl">Your class · Lớp</label><input id="cl" placeholder="6H1"></div></div>' +
@@ -121,15 +152,9 @@
       '<p class="vn" style="margin:0 0 6px">Choose the station nearest your home.</p>' +
       '<div class="btns" style="margin-top:0"><button class="btn sm" id="loadSt">Show stations in Hanoi</button><button class="btn sm ghost" id="nearSt" hidden>Sort by nearest to me</button></div>' +
       '<div id="stMsg" class="vn"></div><div id="stList"></div><div id="stPicked"></div>' +
-      '<div class="err" id="setupErr"></div>' +
+      '<div class="err" id="setupErr"></div><div id="dupBox"></div>' +
       '<div class="btns"><button class="btn g" id="startBtn">Start my Air Watch</button></div>';
     w.appendChild(c);
-
-    const cont = el("div", "card");
-    cont.innerHTML = '<div class="eyebrow">Already started on another phone or computer?</div>' +
-      '<div class="row2"><div><label for="cc">Your code · Mã của em</label><input id="cc" maxlength="6" placeholder="K7Q2MX" style="text-transform:uppercase"></div>' +
-      '<div style="align-self:end"><button class="btn ghost" id="ccBtn">Continue with my code</button></div></div><div class="err" id="ccErr"></div>';
-    w.appendChild(cont);
 
     const nm = $("#nm"), cl = $("#cl"), ar = $("#ar");
     nm.value = S.name; cl.value = S.cls; ar.value = S.area;
@@ -155,23 +180,82 @@
       if (!S.slot) { e.textContent = "Choose your time."; return; }
       if (!S.st || !txt(S.st.name)) { e.textContent = "Choose your station."; return; }
       e.textContent = "";
-      S.started = true; save(); push();
-      renderAll();
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      /* one log per student: if this name and class already has one, offer it first */
+      checkExisting().then(m => { if (m) askSame(m); else begin(); });
+    };
+    $("#findBtn").onclick = () => {
+      const out = $("#found"), fn = txt($("#fnm").value), fc = txt($("#fcl").value);
+      if (fn.length < 2) { out.innerHTML = '<div class="err">Type your name first.</div>'; return; }
+      if (!window.AWSYNC || !AWSYNC.available() || !window.AWST) { out.innerHTML = '<div class="err">Cannot reach your teacher’s page right now. Check the internet and try again.</div>'; return; }
+      out.innerHTML = '<p class="vn">Looking…</p>';
+      AWSYNC.getPath("roster").then(r => {
+        const list = AWST.findInRoster(r || {}, fn, fc);
+        if (!list.length) { out.innerHTML = '<div class="note">No Air Watch found with that name. Check the spelling, try only your first name, or ask your teacher for your code.</div>'; return; }
+        out.innerHTML = '<p class="vn" style="margin:10px 0 6px">Tap your own Air Watch — check the station and the days saved:</p>';
+        const box = el("div", "stlist");
+        list.forEach(m => {
+          const b = el("button", "st findrow", '<span class="nm">' + esc(m.n) + ' · ' + esc(m.c) + '<small>' + esc(m.st || "no station yet") + ' · ' + (m.d || 0) + (m.d === 1 ? ' day' : ' days') + ' saved</small></span><span class="me">This is me</span>');
+          b.type = "button";
+          b.onclick = () => { out.querySelectorAll(".findrow").forEach(x => { x.disabled = true; }); loadCode(m.code, out); };
+          box.appendChild(b);
+        });
+        out.appendChild(box);
+      });
     };
     $("#ccBtn").onclick = () => {
       const code = txt($("#cc").value).toUpperCase();
       const e = $("#ccErr");
       if (!/^[A-Z0-9]{6}$/.test(code)) { e.textContent = "Your code has 6 letters or numbers."; return; }
-      if (!window.AWSYNC || !AWSYNC.available()) { e.textContent = "Cannot reach your teacher's page right now. Check the internet and try again."; return; }
       e.textContent = "Loading…";
-      AWSYNC.getStudent(code).then(v => {
-        if (!v) { e.textContent = "No Air Watch found with that code."; return; }
-        S = Object.assign({}, BLANK, { code, name: v.n || "", cls: v.c || "", area: v.area || "", slot: v.slot || "", st: v.st || null, days: v.days || {}, refl: v.refl || {}, sub: !!v.sub, subAt: v.subAt || 0, created: v.created || Date.now(), started: true });
-        saveLocal(); lastPushOk = true; renderAll(); paintLive(true);
-      });
+      loadCode(code, e);
     };
   }
+
+  /* ───────── one log per student: find, load, join ───────── */
+  function quietSet(p, v) { const db = window.AWSYNC && AWSYNC.stationDb(); return db ? db.set(p, v).catch(() => {}) : Promise.resolve(); }
+  function myLink() { return location.href.split("#")[0].split("?")[0] + "?code=" + S.code; }
+  function tell(box, msg) { if (!box) { alertNote(msg); return; } if (box.id === "found") box.innerHTML = '<div class="err">' + esc(msg) + '</div>'; else box.textContent = msg; }
+  function alertNote(msg) { const h = $("#hdr"); if (!h) return; const n = el("div", "note", esc(msg)); h.appendChild(n); setTimeout(() => n.remove(), 9000); }
+  function loadCode(code, box, hops) {
+    if (!window.AWSYNC || !AWSYNC.available()) { tell(box, "Cannot reach your teacher's page right now. Check the internet and try again."); return Promise.resolve(false); }
+    return AWSYNC.getPath("moved/" + code).then(to => {
+      if (to && to !== code && (hops || 0) < 3) return loadCode(to, box, (hops || 0) + 1);
+      return AWSYNC.getStudent(code).then(v => {
+        if (!v) { tell(box, "No Air Watch found with that code."); return false; }
+        adopt(code, v); return true;
+      });
+    });
+  }
+  function adopt(code, v) {
+    const old = S, oldDays = old.days || {};
+    /* this device already has days saved for the same student under another code: join them */
+    const join = old.code !== code && Object.keys(oldDays).length > 0 && (!txt(old.name) || (window.AWST && AWST.nameScore(old.name, v.n) > 0));
+    S = Object.assign({}, BLANK, {
+      code, name: v.n || "", cls: v.c || "", area: v.area || "", slot: v.slot || old.slot || "", st: v.st || old.st || null,
+      days: join ? AWST.mergeDays(v.days || {}, oldDays) : (v.days || {}), drafts: old.drafts || {}, thumbs: {}, refl: v.refl || (join ? old.refl : {}) || {},
+      q: v.q || (join ? old.q : null) || null, sub: !!v.sub, subAt: v.subAt || 0, created: v.created || Date.now(), started: true
+    });
+    SEL = null; rosterKey = ""; saveLocal(); lastPushOk = true;
+    if (join && old.code && window.AWSYNC) {
+      const fromOld = Object.keys(oldDays).filter(k => S.days[k] === oldDays[k] && oldDays[k] && oldDays[k].photo);
+      AWSYNC.copyPhotos(old.code, code, fromOld).then(() => quietSet("moved/" + old.code, code)).then(() => { quietSet("students/" + old.code, null); quietSet("roster/" + old.code, null); });
+    }
+    push(); renderAll(); paintLive(true);
+    alertNote("Welcome back, " + (S.name || "") + " — your Air Watch is here." + (join ? " Your days from this device were added to it." : ""));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function checkExisting() {
+    if (!window.AWSYNC || !AWSYNC.available() || !window.AWST) return Promise.resolve(null);
+    return AWSYNC.getPath("roster").then(r => AWST.findInRoster(r || {}, S.name, S.cls).find(x => x.code !== S.code && AWST.sameStudent({ n: x.n, c: x.c }, { n: S.name, c: S.cls })) || null).catch(() => null);
+  }
+  function askSame(m) {
+    const box = $("#dupBox"); if (!box) { begin(); return; }
+    box.innerHTML = '<div class="note">We found an Air Watch for <b>' + esc(m.n) + ' · ' + esc(m.c) + '</b> (' + esc(m.st || "no station yet") + ', ' + (m.d || 0) + (m.d === 1 ? ' day' : ' days') + ' saved). Is it yours?' +
+      '<div class="btns"><button class="btn g sm" type="button" id="yesMine">Yes — continue it</button><button class="btn ghost sm" type="button" id="notMine">No — I am a different student</button></div><div class="err" id="dupErr"></div></div>';
+    $("#yesMine").onclick = () => loadCode(m.code, $("#dupErr"));
+    $("#notMine").onclick = () => { box.innerHTML = ""; begin(); };
+  }
+  function begin() { S.started = true; save(); push(); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   function paintPicked() {
     const p = $("#stPicked"); if (!p) return;
@@ -233,7 +317,7 @@
     i.oninput = () => { S.st = { uid: null, name: i.value, custom: true, url: C.hanoiMap }; save(true); };
   }
   function pickStation(s) {
-    S.st = { uid: s.uid, name: s.name, custom: false, url: WAQI.link(s.uid), parts: [] };
+    S.st = { uid: s.uid, name: s.name, custom: false, url: WAQI.link(s.uid), parts: [], lat: s.lat, lon: s.lon };
     save(true);
     document.querySelectorAll(".st").forEach(x => x.classList.remove("on"));
     paintPicked();
@@ -298,8 +382,11 @@
     const n = SEL; if (!n || n < 1 || n > C.days) return;
     const st = dayState(n);
     if (st === "lock") { w.appendChild(el("div", "note", "Day " + n + " opens on " + esc(pretty(dateOfDay(n))) + ".")); return; }
-    if (S.days[n]) { w.appendChild(summaryCard(n)); return; }
-    w.appendChild(formCard(n, st === "missed"));
+    if (S.days[n]) { const sc = summaryCard(n); w.appendChild(sc); allTimes(n, sc); return; }
+    const fc = formCard(n, st === "missed");
+    w.appendChild(fc);
+    /* look first, then check: the station numbers appear only after the guess is locked */
+    if (draftOf(n).gAt) allTimes(n, fc);
   }
 
   function catChip(c, on) {
@@ -534,6 +621,76 @@
     return null;
   }
 
+  /* ───────── the station at all three times (saved by the app, a classmate, or estimated) ───────── */
+  function allTimes(n, card, before) {
+    if (!window.AWSYNC || !AWSYNC.available() || !window.AWST || !S.st || !S.st.uid) return;
+    const date = dateOfDay(n), cs = CFG.classStation;
+    const list = [[S.st.uid, "Your station"]];
+    if (cs && cs.uid && cs.uid !== S.st.uid) list.push([cs.uid, "Class station"]);
+    const box = el("div", "alltimes"); box.innerHTML = '<p class="vn">Loading the station numbers…</p>';
+    if (before) card.insertBefore(box, before); else card.appendChild(box);
+    Promise.all(list.map(([uid]) => Promise.all([AWSYNC.getPath("stationLog/s" + uid + "/" + date), AWSYNC.getPath("stationEst/s" + uid + "/" + date)]))).then(rs => {
+      let any = false;
+      const rows = rs.map(([log, est], i) => '<div class="atrow"><span class="atn">' + esc(list[i][1]) + '</span>' + AWST.SLOTS.map(sl => {
+        const L = log && log[sl.k], E = est && est[sl.k];
+        const mine = S.slot === sl.k ? " mine" : "";
+        if (L && L.aqi != null) { any = true; const c = CAT(L.aqi); return '<span class="atc' + mine + '"><i>' + esc(sl.short) + '</i><b class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + L.aqi + '</b><small>' + (L.by === S.code ? "you" : L.src === "class" ? "a classmate" : "station record") + '</small></span>'; }
+        if (E && E.aqi != null) { any = true; const c = CAT(E.aqi); return '<span class="atc est' + mine + '"><i>' + esc(sl.short) + '</i><b class="aqi" style="border-color:' + c.col + '">≈' + E.aqi + '</b><small>estimate</small></span>'; }
+        return '<span class="atc none' + mine + '"><i>' + esc(sl.short) + '</i><b>–</b><small>' + (AWST.ended(date, sl, Date.now()) ? "no reading" : "later") + '</small></span>';
+      }).join("") + '</div>').join("");
+      box.innerHTML = '<b>All three times on ' + esc(pretty(date)) + '</b><p class="vn" style="margin:2px 0 6px">Compare the morning, after school and the evening. Your time is outlined. ≈ = an estimate from a computer model, not a measurement.</p>' + rows;
+      if (!any && dayState(n) !== "today") box.innerHTML += '<p class="vn">No station numbers for this day yet.</p>';
+    }).catch(() => { box.remove(); });
+  }
+  /* every open homework page helps: in each time window it saves every chosen station once */
+  let registered = "";
+  function registerStation() {
+    if (!window.AWST || !window.AWSYNC || !AWSYNC.available() || !S.st || !S.st.uid) return;
+    const rk = S.st.uid + "|" + ((CFG.classStation || {}).uid || "");
+    if (rk === registered) return; registered = rk;
+    const want = {}; want["s" + S.st.uid] = S.st.lat != null ? { name: S.st.name, lat: S.st.lat, lon: S.st.lon } : { name: S.st.name };
+    const cs = CFG.classStation; if (cs && cs.uid) want["s" + cs.uid] = { name: cs.name, cls: true };
+    AWST.syncMeta({ db: AWSYNC.stationDb(), want }).catch(() => {});
+  }
+  let collecting = false;
+  function startCollector() {
+    if (collecting || !window.AWST || !window.AWSYNC || !AWSYNC.available() || typeof fetch !== "function") return;
+    collecting = true;
+    const run = () => { const db = AWSYNC.stationDb(); if (!db) return; AWST.collect({ db, fetch: (u, o) => fetch(u, o), token: C.waqiToken, after: 30, src: "app", day1: C.day1, days: C.days }).catch(() => {}); };
+    setTimeout(run, 4000 + Math.random() * 20000);
+    setInterval(run, 4 * 60000 + Math.random() * 60000);
+  }
+
+  /* ───────── my question for the lesson ───────── */
+  function renderQuestion() {
+    const w = $("#qWrap"); if (!w) return;
+    w.innerHTML = "";
+    if (!setupDone()) return;
+    const q = S.q || {};
+    const c = el("div", "card qcard");
+    c.innerHTML = '<div class="eyebrow">For the lesson on ' + esc(C.lessonLabel) + ' · Cho tiết học</div><h2 style="font-size:22px">My question</h2>' +
+      '<p class="vn" style="margin:4px 0 8px">What do you wonder about the air now? Write ONE question. You can change it any day before the lesson. In class, you and your partner choose one question to ask. · Em thắc mắc điều gì về không khí? Viết MỘT câu hỏi.</p>' +
+      '<label>Start with one of these</label><div class="chips" id="qst"></div>' +
+      '<label for="qtx">My question · Câu hỏi của em</label><textarea id="qtx" rows="2" maxlength="200" placeholder="What would happen if…"></textarea><div class="vn" id="qsaved"></div>';
+    w.appendChild(c);
+    const box = c.querySelector("#qst"), ta = c.querySelector("#qtx"), sv = c.querySelector("#qsaved");
+    const paintQ = () => { const t = txt((S.q || {}).t); sv.innerHTML = t.length >= 8 ? '✓ Saved' + ((S.q || {}).at ? ' · ' + esc(new Date(S.q.at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })) : '') + (/\?\s*$/.test(t) ? '' : ' · <b>End it with a question mark?</b>') : 'Write a full question (a few words or more).'; };
+    STARTERS.forEach(st => {
+      const b = el("button", "chip" + (q.st === st ? " on" : ""), esc(st)); b.type = "button";
+      b.onclick = () => {
+        S.q = Object.assign({}, S.q, { st, at: Date.now() });
+        if (!txt(ta.value)) ta.value = st.replace("…", " ");
+        S.q.t = ta.value; save(true);
+        box.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b));
+        ta.focus(); paintQ();
+      };
+      box.appendChild(b);
+    });
+    ta.value = q.t || "";
+    ta.oninput = () => { S.q = Object.assign({}, S.q, { t: ta.value, at: Date.now() }); save(true); paintQ(); };
+    paintQ();
+  }
+
   /* ───────── look back + hand in ───────── */
   function renderExtra() {
     const w = $("#extraWrap"); w.innerHTML = "";
@@ -555,6 +712,7 @@
       (wr ? '<br>Your worst day was <b>Day ' + worst + '</b> (' + esc(pretty(wr.date)) + '): AQI <b>' + wr.a.aqi + '</b>. You noted: ' + esc(wr.what.map(k => (WHAT.find(x => x[0] === k) || [0, k])[1]).join(", ")) + '.' : '') + '</div>' +
       '<label for="rf1">Why do you think Day ' + (worst || "?") + ' was the worst? · Vì sao?</label><input id="rf1" maxlength="200" placeholder="I think it was the worst because…">' +
       '<label for="rf2">What do your guesses tell you about looking at the sky?</label><input id="rf2" maxlength="200" placeholder="Looking at the sky… because…">' +
+      '<p class="vn" style="margin-top:8px">Check <b>My question</b> above too — is it the question you want to ask on ' + esc(C.lessonLabel.split(",")[0]) + '?</p>' +
       '<div class="err" id="eR"></div>' +
       '<div class="btns"><button class="btn g" id="hand">' + (S.sub ? "Update my hand-in" : "Hand in my Air Watch") + '</button></div>' +
       (S.sub ? '<div class="ok">Handed in ' + new Date(S.subAt).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }) + '. Bring your book on ' + esc(C.lessonLabel) + '.</div>' : '');
@@ -594,12 +752,16 @@
   }
 
   /* ───────── boot ───────── */
-  function renderAll() { renderHeader(); renderSetup(); renderWeek(); renderDay(); renderExtra(); paintLive(); }
+  function renderAll() { renderHeader(); renderSetup(); renderWeek(); renderDay(); renderQuestion(); renderExtra(); paintLive(); if (setupDone()) startCollector(); }
   if (window.AWSYNC) {
     AWSYNC.onError(() => paintLive());
-    AWSYNC.watchConfig(c => { const before = JSON.stringify(CFG.classStation || null); CFG = c || {}; if (JSON.stringify(CFG.classStation || null) !== before) renderDay(); });
+    AWSYNC.watchConfig(c => { const before = JSON.stringify(CFG.classStation || null); CFG = c || {}; if (JSON.stringify(CFG.classStation || null) !== before) { renderDay(); registerStation(); } });
   }
   saveLocal();
   renderAll();
-  if (setupDone()) push();
+  /* my own link (…homework.html?code=ABC123) opens my log on any device */
+  const linkCode = (/[?&]code=([A-Za-z0-9]{6})(?:&|$)/.exec(location.search) || [])[1];
+  if (linkCode) { try { history.replaceState(null, "", location.pathname); } catch (e) {} }
+  if (linkCode && linkCode.toUpperCase() !== S.code) loadCode(linkCode.toUpperCase(), null);
+  else if (setupDone()) push();
 })();

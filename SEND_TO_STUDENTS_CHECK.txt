@@ -1,0 +1,21 @@
+AIR WATCH — YOUR NUMBERS ARE NOW CHECKED (same link: https://vintiz-dot.github.io/g6-air-watch/homework)
+
+When you type your AQI, your PM2.5 and the class station's AQI, the page checks them with the station.
+If a number does not match, it is not saved. The page shows you how to find the right one:
+  - open YOUR station (tap "Open my station") and check its name at the top,
+  - the AQI is the big number at the top,
+  - PM2.5 is the first number in the PM2.5 row.
+If your station is not working, the page asks you to choose another station near your home.
+Only fill in a past day if you wrote the numbers down on that day.
+
+------------------------------------------------------------
+
+AIR WATCH — SỐ LIỆU CỦA EM GIỜ ĐƯỢC KIỂM TRA (vẫn link cũ: https://vintiz-dot.github.io/g6-air-watch/homework)
+
+Khi em nhập AQI, PM2.5 và AQI của trạm chung của lớp, trang web sẽ so sánh với số của trạm.
+Nếu một số không khớp, số đó sẽ không được lưu. Trang web sẽ chỉ cho em cách tìm đúng số:
+  - mở trạm CỦA EM (bấm "Open my station") và kiểm tra tên trạm ở trên cùng,
+  - AQI là số to ở trên cùng,
+  - PM2.5 là số đầu tiên ở dòng PM2.5.
+Nếu trạm của em không hoạt động, trang web sẽ đề nghị em chọn một trạm khác gần nhà.
+Chỉ điền ngày cũ nếu em đã ghi lại số liệu vào đúng hôm đó.

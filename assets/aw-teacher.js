@@ -12,7 +12,12 @@
   const catName = k => ((CATS.find(c => c.k === k) || {}).en || "?");
 
   let STUDENTS = {}, CFG = {}, FLAGS = {}, SELECTED = null;
-  let LOG = {}, EST = {}, META = {}, ESTAT = 0, COL = null;
+  let LOG = {}, EST = {}, META = {}, ESTAT = 0, COL = null, HIST = {}, BACK = {};
+  /* is a saved number believable? (compared with the station: see assets/aw-stations.js, verdict) */
+  const ctx = () => ({ log: LOG, hist: HIST, est: EST, check: C.check, now: Date.now() });
+  const vOf = (s, d) => (window.AWST && s && d && d.a) ? AWST.verdict(s, d, ctx()) : { v: "none", bad: [], j: {} };
+  const FNAME = { aqi: "AQI", pm25: "PM2.5", raqi: "class station AQI" };
+  const BY = { live: "the station when it was saved", record: "the station record", est: "the model estimate" };
 
   /* ───────── PIN ───────── */
   function gate() {
@@ -43,6 +48,7 @@
       '<div class="btns" style="margin-top:8px"><button class="btn sm" id="loadSt">Load live Hanoi stations</button></div><div id="stMsg" class="vn"></div><div id="stList"></div></div>' +
 
       '<div class="card"><div class="eyebrow">Progress</div><div id="prog"></div></div>' +
+      '<div class="card" id="flagCard" hidden></div>' +
       '<div class="card" id="dupCard" hidden></div>' +
       '<div class="card"><div class="eyebrow">Every student · tap a row for the full week</div><div class="tblwrap" id="tbl"></div>' +
       '<div class="btns"><button class="btn sm" id="csv">Download all answers (CSV)</button><button class="btn sm ghost" id="json">Download a backup (JSON)</button><button class="btn sm ghost" id="clearAll">Clear the whole homework room…</button></div></div>' +
@@ -67,9 +73,11 @@
 
     AWSYNC.watchConfig(c => { CFG = c || {}; paintReady(); paintCS(); housekeeping(); });
     AWSYNC.watchPhotoFlags(f => { FLAGS = f || {}; paintStars(); });
-    AWSYNC.watchStudents(v => { STUDENTS = v || {}; paintReady(); paintProgress(); paintTable(); paintQuestions(); paintDups(); paintStations(); housekeeping(); if (SELECTED) paintDetail(SELECTED); });
-    AWSYNC.watchPath("stationLog", v => { LOG = v || {}; paintStations(); });
-    AWSYNC.watchPath("stationEst", v => { EST = v || {}; paintStations(); });
+    AWSYNC.watchStudents(v => { STUDENTS = v || {}; paintReady(); paintProgress(); paintTable(); paintFlags(); paintQuestions(); paintDups(); paintStations(); housekeeping(); if (SELECTED) paintDetail(SELECTED); });
+    AWSYNC.watchPath("stationLog", v => { LOG = v || {}; paintStations(); recheck(); });
+    AWSYNC.watchPath("stationEst", v => { EST = v || {}; paintStations(); recheck(); });
+    AWSYNC.watchPath("stationHist", v => { HIST = v || {}; recheck(); });
+    AWSYNC.watchPath("sentBack", v => { BACK = v || {}; paintFlags(); housekeeping(); if (SELECTED) paintDetail(SELECTED); });
     AWSYNC.watchPath("stationMeta", v => { META = v || {}; paintStations(); });
     AWSYNC.watchPath("stationEstAt", v => { ESTAT = +v || 0; paintStations(); });
     $("#estNow").onclick = () => runEstimates($("#estNow"));
@@ -100,6 +108,8 @@
     const m = $("#stMsg"); m.textContent = "Loading…";
     WAQI.stations().then(all => {
       const list = all.filter(s => s.ageH === null || s.ageH <= 72).sort((a, b) => ((a.aqi === null) - (b.aqi === null)) || a.name.localeCompare(b.name));
+      const hl = all.map(s => ({ uid: s.uid, aqi: s.aqi, tms: s.time ? Date.parse(s.time) : NaN }));
+      const broken = s => window.AWST && AWST.isBroken({ uid: s.uid, aqi: s.aqi }, hl, C.check);
       m.textContent = list.length + " stations in the Hanoi area are updating. Check the parts before choosing.";
       const L = $("#stList"); L.innerHTML = "";
       const t = el("table", "tbl");
@@ -108,7 +118,7 @@
       list.forEach(s => {
         const c = CAT(s.aqi);
         const tr = el("tr");
-        tr.innerHTML = '<td>' + esc(s.name) + '</td><td>' + (c ? '<span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + s.aqi + '</span>' : '–') + '</td>' +
+        tr.innerHTML = '<td>' + esc(s.name) + (broken(s) ? ' <span class="tag">not working now</span>' : '') + '</td><td>' + (c ? '<span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + s.aqi + '</span>' : '–') + '</td>' +
           '<td>' + (s.ageH === null ? "?" : s.ageH <= 1 ? "this hour" : s.ageH + " h ago") + '</td><td class="pp"><button class="btn sm ghost">check</button></td><td><button class="btn sm">Use</button></td>';
         const [chk, use] = tr.querySelectorAll("button");
         chk.onclick = () => { chk.textContent = "…"; WAQI.feed(s.uid).then(f => { tr.querySelector(".pp").textContent = f.nParts + " of 6: " + PARTS.filter(p => f.parts[p.k] !== null).map(p => p.en).join(", "); }).catch(() => { chk.textContent = "failed"; }); };
@@ -146,10 +156,14 @@
       '<div class="bars">' + per.map(v => '<div style="height:' + Math.round(100 * v / max) + '%"><span>' + v + '</span></div>').join("") + '</div>' +
       '<div class="barlab">' + per.map((_, i) => "Day " + (i + 1)).join("</div><div>").replace(/^/, "<div>") + '</div></div>';
   }
-  function chip(d) {
+  function chip(d, s) {
     if (!d || !d.a) return '<span class="vn">—</span>';
-    const c = CAT(d.a.aqi);
-    return '<span class="aqi" style="background:' + (c ? c.col : "#ccc") + ';color:' + (c ? c.ink : "#000") + '">' + d.a.aqi + '</span>' + (d.late ? '<span class="late" title="entered late">*</span>' : '');
+    const c = CAT(d.a.aqi), V = s ? vOf(s, d) : null;
+    return '<span class="aqi" style="background:' + (c ? c.col : "#ccc") + ';color:' + (c ? c.ink : "#000") + '">' + d.a.aqi + '</span>' + (d.late ? '<span class="late" title="entered late">*</span>' : '') +
+      (V && V.v === "bad" ? '<span class="flag" title="' + esc(badText(V)) + '">⚠</span>' : '');
+  }
+  function badText(V) {
+    return V.bad.map(b => FNAME[b.f] + " " + b.got + " — " + (b.by === "est" ? "the estimate for that time is ≈" + b.r : (b.by === "live" ? "the station showed " : "the station record says ") + b.r)).join("; ");
   }
   function paintTable() {
     const t = $("#tbl"); if (!t) return;
@@ -162,10 +176,10 @@
       const slot = (C.slots.find(x => x.k === s.slot) || {}).en || "";
       const [r, n] = rightCount(s);
       h += '<tr class="click" data-code="' + esc(s.code) + '"><td><b>' + esc(s.n) + '</b></td><td>' + esc(s.c) + '</td><td>' + esc(s.st ? s.st.name : "") + '</td><td>' + esc(slot.split(",")[0]) + '</td>';
-      for (let i = 1; i <= C.days; i++) h += '<td>' + chip(daysOf(s)[i]) + '</td>';
+      for (let i = 1; i <= C.days; i++) h += '<td>' + chip(daysOf(s)[i], s) + '</td>';
       h += '<td>' + (n ? r + "/" + n : "–") + '</td><td>' + (s.sub ? "✓" : "") + '</td></tr>';
     });
-    h += '</tbody></table><p class="vn">* entered late (on a different day from the day it describes).</p>';
+    h += '</tbody></table><p class="vn">* entered late (on a different day from the day it describes). ⚠ a number does not match the station — see “Numbers to check”.</p>';
     t.innerHTML = h;
     t.querySelectorAll("tr.click").forEach(tr => tr.onclick = () => { SELECTED = tr.dataset.code; paintDetail(SELECTED); $("#detail").scrollIntoView({ behavior: "smooth", block: "start" }); });
   }
@@ -175,27 +189,36 @@
     const s = STUDENTS[code]; const box = $("#detail"); if (!s || !box) return;
     box.hidden = false;
     const slot = (C.slots.find(x => x.k === s.slot) || {}).en || "";
+    const prev = s.stPrev ? (Array.isArray(s.stPrev) ? s.stPrev : Object.values(s.stPrev)).filter(Boolean) : [];
+    const back = BACK[code] || {};
     let h = '<div class="eyebrow">' + esc(s.n) + ' · ' + esc(s.c) + ' · code ' + esc(code) + '</div>' +
       '<p style="margin:0 0 8px">Station: <b>' + esc(s.st ? s.st.name : "") + '</b> · Time: ' + esc(slot) + (s.area ? ' · Lives in ' + esc(s.area) : '') + '</p>' +
-      '<div class="tblwrap"><table class="tbl"><thead><tr><th>Day</th><th>Sky</th><th>Guess</th><th>AQI</th><th>PM2.5</th><th>Biggest</th><th>Updated</th><th>Class stn</th><th>Happening</th><th>Saved</th><th>Photo</th></tr></thead><tbody>';
+      (prev.length ? '<p class="vn" style="margin:-4px 0 8px">Changed station: ' + prev.map(p => esc(p.name || ("station " + p.uid)) + ' (until ' + esc(hhmm(p.until)) + (p.why ? ', ' + esc(p.why) : '') + ')').join(" → ") + ' → ' + esc(s.st ? s.st.name : "") + '.</p>' : '') +
+      '<div class="tblwrap"><table class="tbl"><thead><tr><th>Day</th><th>Sky</th><th>Guess</th><th>AQI</th><th>PM2.5</th><th>Biggest</th><th>Updated</th><th>Class stn</th><th>Happening</th><th>Saved</th><th>Photo</th><th>Check</th></tr></thead><tbody>';
     for (let i = 1; i <= C.days; i++) {
       const d = daysOf(s)[i];
-      if (!d) { h += '<tr><td>' + i + '</td><td colspan="10" class="vn">not logged</td></tr>'; continue; }
+      if (!d) {
+        const b = back[i];
+        h += '<tr><td>' + i + '</td><td colspan="11" class="vn">' + (b && b.at ? 'sent back ' + esc(hhmm(b.at)) + ' — waiting for the student to redo it' : 'not logged') + '</td></tr>'; continue;
+      }
       const c = CAT(d.a.aqi); const right = c && d.g && d.g.guess === c.k;
-      h += '<tr><td>' + i + '</td><td>' + esc(SKY[d.g.sky] || "") + '</td><td>' + esc(catName(d.g.guess)) + (right ? ' ✓' : ' ✗') + '</td><td>' + chip(d) + '</td>' +
+      const V = vOf(s, d);
+      h += '<tr><td>' + i + '</td><td>' + esc(SKY[d.g.sky] || "") + '</td><td>' + esc(catName(d.g.guess)) + (right ? ' ✓' : ' ✗') + '</td><td>' + chip(d, s) + '</td>' +
         '<td>' + (d.a.pm25 === null || d.a.pm25 === undefined ? "–" : d.a.pm25) + '</td><td>' + esc(partName(d.a.big)) + '</td><td>' + esc(d.a.upd || "") + '</td>' +
-        '<td>' + (d.ref ? d.ref.aqi : "–") + '</td><td>' + esc((d.what || []).map(k => WHAT[k] || k).join(", ")) + (d.note ? '<br><i>' + esc(d.note) + '</i>' : '') + '</td>' +
+        '<td>' + (d.ref ? (d.ref.nodata ? "no data" : d.ref.aqi) : "–") + '</td><td>' + esc((d.what || []).map(k => WHAT[k] || k).join(", ")) + (d.note ? '<br><i>' + esc(d.note) + '</i>' : '') + '</td>' +
         '<td>' + new Date(d.at).toLocaleString("en-GB", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (d.late ? ' <span class="late">late</span>' : '') + '</td>' +
-        '<td>' + (d.photo ? '<button class="btn sm ghost" data-ph="' + i + '">show</button>' : '') + '</td></tr>';
-      if (d.six) h += '<tr><td></td><td colspan="10" class="vn">Six parts: ' + PARTS.map(p => esc(p.en) + ' ' + (d.six[p.k] === null ? '–' : d.six[p.k])).join(' · ') + '</td></tr>';
+        '<td>' + (d.photo ? '<button class="btn sm ghost" data-ph="' + i + '">show</button>' : '') + '</td>' +
+        '<td>' + checkCell(V) + '<br><button class="btn sm ghost" data-back="' + i + '">Send back</button></td></tr>';
+      if (d.six) h += '<tr><td></td><td colspan="11" class="vn">Six parts: ' + PARTS.map(p => esc(p.en) + ' ' + (d.six[p.k] === null ? '–' : d.six[p.k])).join(' · ') + '</td></tr>';
     }
-    h += '</tbody></table></div>';
+    h += '</tbody></table></div><p class="vn">Check: ✓ matches the station · ≈ close enough to the model estimate (no station reading for that time) · ? nothing to compare with yet · ⚠ does not match. <b>Send back</b> reopens the day on the student’s page (their guess and notes stay; they type the numbers again and the page checks them).</p>';
     if (s.q && txt(s.q.t)) h += '<div class="ok" style="background:var(--soft);color:var(--text)"><b>Question for the lesson:</b> ' + esc(txt(s.q.t)) + '</div>';
     if (s.refl && (s.refl.why || s.refl.look)) h += '<div class="ok" style="background:var(--soft);color:var(--text)"><b>Look back:</b> worst day ' + esc(s.refl.worst || "?") + ' — “' + esc(s.refl.why || "") + '”<br>“' + esc(s.refl.look || "") + '”</div>';
     h += '<div id="dPh" class="pgrid" style="margin-top:10px"></div>' +
       '<div class="btns"><button class="btn sm ghost" id="rm">Remove this student (test entries)</button><button class="btn sm ghost" id="cl">Close</button></div>';
     box.innerHTML = h;
     box.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => showPhoto(code, +b.dataset.ph, $("#dPh")));
+    box.querySelectorAll("[data-back]").forEach(b => b.onclick = () => armBack(b, code, +b.dataset.back));
     $("#cl").onclick = () => { SELECTED = null; box.hidden = true; };
     const rm = $("#rm");
     rm.onclick = () => {
@@ -203,6 +226,47 @@
       AWSYNC.removeStudent(code).then(() => { SELECTED = null; box.hidden = true; });
     };
   }
+  function checkCell(V) {
+    const j = V.j || {};
+    if (V.v === "bad") return '<span class="ckc bad" title="' + esc(badText(V)) + '">⚠ ' + esc(V.bad.map(b => FNAME[b.f] + " " + b.got + " vs " + (b.by === "est" ? "≈" : "") + b.r).join(", ")) + '</span>';
+    if (V.v === "ok") return '<span class="ckc good" title="' + esc("Matches " + (BY[V.by] || "the station")) + '">' + (V.by === "est" ? "≈ plausible" : "✓ station") + '</span>';
+    return '<span class="ckc" title="No station reading or estimate for that time yet">? not checked</span>';
+  }
+  /* two taps: send the day back so the student redoes it (the guess and notes stay) */
+  function armBack(b, code, n) {
+    if (b.dataset.arm !== "1") { b.dataset.arm = "1"; b.textContent = "Tap again to send back"; return; }
+    b.disabled = true; b.textContent = "Sending…";
+    sendBack(code, n).then(ok => { b.textContent = ok ? "Sent back ✓" : "Could not send"; });
+  }
+  function sendBack(code, n) {
+    const s = STUDENTS[code] || {}, d = daysOf(s)[n];
+    if (!d) return Promise.resolve(false);
+    const was = { aqi: d.a ? d.a.aqi : null, pm25: d.a ? d.a.pm25 : null, raqi: d.ref ? d.ref.aqi : null, date: d.date || null, at: d.at || null };
+    return AWSYNC.setPath("sentBack/" + code + "/" + n, { at: Date.now(), why: "numbers", was })
+      .then(ok => ok ? AWSYNC.setPath("students/" + code + "/days/" + n, null) : false);
+  }
+  /* every day with a number that does not match its station, and days sent back and not yet redone */
+  function paintFlags() {
+    const box = $("#flagCard"); if (!box || !window.AWST) return;
+    const rows = [], waiting = [];
+    list().forEach(s => {
+      for (let i = 1; i <= C.days; i++) {
+        const d = daysOf(s)[i];
+        if (d) { const V = vOf(s, d); if (V.v === "bad") rows.push({ s, i, d, V }); }
+        else { const b = (BACK[s.code] || {})[i]; if (b && b.at) waiting.push({ s, i, b }); }
+      }
+    });
+    box.hidden = !rows.length && !waiting.length;
+    if (box.hidden) { box.innerHTML = ""; return; }
+    box.innerHTML = '<div class="eyebrow">Numbers to check</div>' +
+      (rows.length ? '<p class="vn" style="margin:0 0 6px">These saved days have a number that does not match the station at that time (a wrong station, a typing mistake, or a made-up number). <b>Send back</b> reopens the day for the student — their guess and notes stay, and their page checks the new numbers.</p>' +
+        rows.map((r, k) => '<div class="flagrow"><div><b>' + esc(r.s.n) + '</b> · ' + esc(r.s.c) + ' · Day ' + r.i + ' (' + esc(r.d.date || "") + ')' + (r.d.late ? ' <span class="late">late</span>' : '') +
+          '<small>' + esc(badText(r.V)) + '</small></div><button class="btn sm" data-k="' + k + '">Send back</button></div>').join("") : '') +
+      (waiting.length ? '<p class="vn" style="margin:10px 0 4px"><b>Sent back, waiting for the student:</b> ' + waiting.map(w => esc(w.s.n) + ' Day ' + w.i + ' (' + esc(hhmm(w.b.at)) + ')').join(" · ") + '</p>' : '');
+    box.querySelectorAll("[data-k]").forEach(b => b.onclick = () => { const r = rows[+b.dataset.k]; armBack(b, r.s.code, r.i); });
+  }
+  let reT = null;
+  function recheck() { clearTimeout(reT); reT = setTimeout(() => { paintTable(); paintFlags(); if (SELECTED) paintDetail(SELECTED); }, 700); }
 
   /* ───────── station readings: collect, share classmates' readings, estimate the gaps ───────── */
   const fetchFn = (u, o) => fetch(u, o);
@@ -213,13 +277,24 @@
       const db = AWSYNC.stationDb(); if (!db || !window.AWST) return;
       AWST.syncMeta({ db, students: STUDENTS, cfg: CFG })
         .then(() => AWST.syncRoster({ db, students: STUDENTS }))
-        .then(() => AWST.copyClassmates({ db, students: STUDENTS }))
+        .then(() => AWST.copyClassmates({ db, students: STUDENTS, log: LOG, hist: HIST, est: EST, check: C.check }))
+        .then(() => reapplyBack())
         .catch(e => console.warn("[AW] housekeeping", e));
     }, 1500);
   }
+  /* a day sent back must stay open even if an old copy of the student's page saves it again */
+  function reapplyBack() {
+    const jobs = [];
+    Object.keys(BACK).forEach(code => {
+      const s = STUDENTS[code], b = BACK[code] || {};
+      if (!s) return;
+      Object.keys(b).forEach(n => { const d = daysOf(s)[n]; if (b[n] && b[n].at && d && (d.at || 0) <= b[n].at) jobs.push(AWSYNC.setPath("students/" + code + "/days/" + n, null)); });
+    });
+    return Promise.all(jobs);
+  }
   function runCollect() {
     const db = AWSYNC.stationDb(); if (!db || !window.AWST) return Promise.resolve(null);
-    return AWST.collect({ db, fetch: fetchFn, token: C.waqiToken, after: 30, src: "app", day1: C.day1, days: C.days })
+    return AWST.collect({ db, fetch: fetchFn, token: C.waqiToken, after: 30, src: "app", day1: C.day1, days: C.days, bounds: C.bounds, check: C.check })
       .then(r => { if (r && r.slot) { COL = Object.assign({ at: Date.now() }, r); paintStations(); } return r; }).catch(() => null);
   }
   function runEstimates(btn) {
@@ -239,7 +314,7 @@
   const hhmm = ms => new Date(ms).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
   function paintStations() {
     const box = $("#stRead"); if (!box || !window.AWST) return;
-    const uids = Object.keys(META).map(k => AWST.uidOf(k)).filter(u => /^\d+$/.test(u));
+    const uids = Object.keys(META).map(k => AWST.uidOf(k)).filter(u => /^-?\d+$/.test(u));
     const now = Date.now(), win = AWST.nextWindow(now);
     let gh = 0, app = 0, cls = 0;
     Object.values(LOG).forEach(byDate => Object.values(byDate || {}).forEach(bySlot => Object.values(bySlot || {}).forEach(r => {
@@ -252,7 +327,7 @@
     if (!uids.length) { box.innerHTML = h + '<p class="vn">No stations yet — they appear when students choose one.</p>'; return; }
     const ds = AWST.dates(C.day1, C.days);
     const names = k => (META[k] && META[k].name) || ("Station " + AWST.uidOf(k));
-    const order = Object.keys(META).filter(k => /^s\d+$/.test(k)).sort((a, b) => ((META[b] || {}).cls ? 1 : 0) - ((META[a] || {}).cls ? 1 : 0) || names(a).localeCompare(names(b)));
+    const order = Object.keys(META).filter(k => /^s-?\d+$/.test(k)).sort((a, b) => ((META[b] || {}).cls ? 1 : 0) - ((META[a] || {}).cls ? 1 : 0) || names(a).localeCompare(names(b)));
     const cov = {}; AWST.coverage(LOG, EST, order.map(AWST.uidOf), C.day1, C.days, now).forEach(c => { cov[c.uid] = c; });
     let t = '<div class="tblwrap"><table class="tbl stcov"><thead><tr><th>Station</th>' + ds.map((d, i) => '<th title="' + esc(d) + '">D' + (i + 1) + '<br><small>M · A · E</small></th>').join("") + '<th>Real / ≈ / none</th></tr></thead><tbody>';
     order.forEach(k => {
@@ -276,7 +351,7 @@
   function fmtMin(m) { return Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0"); }
   function downloadStations() {
     const rows = [["station", "station_id", "date", "time_window", "aqi", "pm25", "source", "station_time"]];
-    Object.keys(META).filter(k => /^s\d+$/.test(k)).forEach(k => {
+    Object.keys(META).filter(k => /^s-?\d+$/.test(k)).forEach(k => {
       const uid = AWST.uidOf(k), nm = (META[k] || {}).name || "";
       AWST.dates(C.day1, C.days).forEach(d => AWST.SLOTS.forEach(sl => {
         const x = AWST.cell(LOG, EST, uid, d, sl.k); if (!x) return;
@@ -357,16 +432,18 @@
   /* ───────── export ───────── */
   function downloadCSV() {
     const cols = ["code", "name", "class", "area", "station", "time_slot", "day", "date", "saved_at", "late", "sky", "guess", "aqi", "aqi_band", "guess_right", "pm25", "biggest", "page_updated", "class_aqi", "class_pm25", "happening", "note", "photo",
-      "six_pm25", "six_pm10", "six_o3", "six_no2", "six_so2", "six_co", "handed_in", "worst_day_why", "looking_sentence", "question"];
+      "six_pm25", "six_pm10", "six_o3", "six_no2", "six_so2", "six_co", "handed_in", "worst_day_why", "looking_sentence", "question", "check", "check_detail", "sent_back"];
     const rows = [cols];
     list().forEach(s => {
       for (let i = 1; i <= C.days; i++) {
         const d = daysOf(s)[i]; if (!d) continue;
-        const c = CAT(d.a.aqi);
+        const c = CAT(d.a.aqi), V = vOf(s, d);
         rows.push([s.code, s.n, s.c, s.area, s.st ? s.st.name : "", s.slot, i, d.date, new Date(d.at).toISOString(), d.late ? "yes" : "no", d.g.sky, d.g.guess, d.a.aqi, c ? c.k : "", c && d.g.guess === c.k ? "yes" : "no",
           d.a.pm25 == null ? "" : d.a.pm25, d.a.big, d.a.upd || "", d.ref ? d.ref.aqi : "", d.ref && d.ref.pm25 != null ? d.ref.pm25 : "", (d.what || []).join("|"), d.note || "", d.photo ? "yes" : "no",
           ...(d.six ? PARTS.map(p => d.six[p.k] == null ? "" : d.six[p.k]) : ["", "", "", "", "", ""]),
-          s.sub ? "yes" : "no", s.refl ? s.refl.why || "" : "", s.refl ? s.refl.look || "" : "", s.q ? txt(s.q.t) : ""]);
+          s.sub ? "yes" : "no", s.refl ? s.refl.why || "" : "", s.refl ? s.refl.look || "" : "", s.q ? txt(s.q.t) : "",
+          V.v === "bad" ? "does not match" : V.v === "ok" ? (V.by === "est" ? "plausible (estimate)" : "matches station") : "not checked", V.v === "bad" ? badText(V) : "",
+          (BACK[s.code] || {})[i] ? "yes" : ""]);
       }
     });
     const csv = rows.map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n");

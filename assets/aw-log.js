@@ -4,6 +4,8 @@
 (function () {
   "use strict";
   const C = window.AW, CAT = window.AW_CAT, CATS = window.AW_CATS, PARTS = window.AW_PARTS;
+  const CK = Object.assign({ tol: 10, estLow: 0.25, estHigh: 3, estPad: 10, tries: 3, waitSec: 30, brokenShare: 0.33 }, C.check || {});
+  const fetchFn = (u, o) => fetch(u, o);
   const K = "g6aw6_log";
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
@@ -33,11 +35,11 @@
   }
 
   /* ───────── state ───────── */
-  const BLANK = { code: "", name: "", cls: "", area: "", slot: "", st: null, days: {}, drafts: {}, thumbs: {}, refl: {}, q: null, sub: false, subAt: 0, created: 0, started: false };
+  const BLANK = { code: "", name: "", cls: "", area: "", slot: "", st: null, stPrev: [], days: {}, drafts: {}, thumbs: {}, refl: {}, q: null, sub: false, subAt: 0, created: 0, started: false };
   const STARTERS = ["What would happen if…", "Why does… but not…?", "How could we know…?", "What if we measured…"];
   let S;
   try { S = Object.assign({}, BLANK, JSON.parse(localStorage.getItem(K) || "{}")); } catch (e) { S = Object.assign({}, BLANK); }
-  S.days = S.days || {}; S.drafts = S.drafts || {}; S.thumbs = S.thumbs || {}; S.refl = S.refl || {};
+  S.days = S.days || {}; S.drafts = S.drafts || {}; S.thumbs = S.thumbs || {}; S.refl = S.refl || {}; S.stPrev = S.stPrev || [];
   if (!S.code) { S.code = makeCode(); S.created = Date.now(); }
   let CFG = {};
   let SEL = null;
@@ -53,7 +55,7 @@
   function save(pushSoon) { saveLocal(); if (pushSoon) { clearTimeout(pushT); pushT = setTimeout(push, 1200); } }
   function payload() {
     return {
-      n: txt(S.name), c: txt(S.cls), area: txt(S.area), slot: S.slot || "", st: S.st || null,
+      n: txt(S.name), c: txt(S.cls), area: txt(S.area), slot: S.slot || "", st: S.st || null, stPrev: S.stPrev || [],
       days: S.days, refl: S.refl, q: S.q || null, sub: !!S.sub, subAt: S.subAt || 0,
       created: S.created || 0, up: Date.now(), build: C.build
     };
@@ -62,9 +64,11 @@
   function push() {
     if (!window.AWSYNC || !AWSYNC.available() || txt(S.name).length < 2) { paintLive(); return Promise.resolve(false); }
     const code = S.code;
-    /* if the teacher joined this log with another one, carry on in that one */
-    return AWSYNC.getPath("moved/" + code).then(to => {
+    /* if the teacher joined this log with another one, carry on in that one;
+       if the teacher sent a day back, reopen it before saving (so it is not sent again) */
+    return Promise.all([AWSYNC.getPath("moved/" + code), AWSYNC.getPath("sentBack/" + code)]).then(([to, back]) => {
       if (to && to !== code) { loadCode(to); return false; }
+      applyBack(back);
       const data = payload();
       return AWSYNC.saveStudent(code, data).then(r => {
         paintLive(r);
@@ -232,6 +236,7 @@
     const join = old.code !== code && Object.keys(oldDays).length > 0 && (!txt(old.name) || (window.AWST && AWST.nameScore(old.name, v.n) > 0));
     S = Object.assign({}, BLANK, {
       code, name: v.n || "", cls: v.c || "", area: v.area || "", slot: v.slot || old.slot || "", st: v.st || old.st || null,
+      stPrev: v.stPrev ? (Array.isArray(v.stPrev) ? v.stPrev : Object.values(v.stPrev)).filter(Boolean) : [],
       days: join ? AWST.mergeDays(v.days || {}, oldDays) : (v.days || {}), drafts: old.drafts || {}, thumbs: {}, refl: v.refl || (join ? old.refl : {}) || {},
       q: v.q || (join ? old.q : null) || null, sub: !!v.sub, subAt: v.subAt || 0, created: v.created || Date.now(), started: true
     });
@@ -240,7 +245,8 @@
       const fromOld = Object.keys(oldDays).filter(k => S.days[k] === oldDays[k] && oldDays[k] && oldDays[k].photo);
       AWSYNC.copyPhotos(old.code, code, fromOld).then(() => quietSet("moved/" + old.code, code)).then(() => { quietSet("students/" + old.code, null); quietSet("roster/" + old.code, null); });
     }
-    push(); renderAll(); paintLive(true);
+    Object.keys(CHK).forEach(k => { delete CHK[k]; });
+    push(); renderAll(); paintLive(true); watchBack();
     alertNote("Welcome back, " + (S.name || "") + " — your Air Watch is here." + (join ? " Your days from this device were added to it." : ""));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -255,7 +261,7 @@
     $("#yesMine").onclick = () => loadCode(m.code, $("#dupErr"));
     $("#notMine").onclick = () => { box.innerHTML = ""; begin(); };
   }
-  function begin() { S.started = true; save(); push(); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function begin() { S.started = true; save(); push(); renderAll(); watchBack(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   function paintPicked() {
     const p = $("#stPicked"); if (!p) return;
@@ -287,8 +293,12 @@
     const m = $("#stMsg");
     m.textContent = "Loading stations…";
     WAQI.stations().then(list => {
-      stationCache = list.filter(s => s.ageH === null || s.ageH <= 72);
-      m.textContent = stationCache.length + " stations. Tap the one nearest your home.";
+      /* stations that are not working (no AQI, or far below every other station) are not offered */
+      const all = list.map(s => ({ uid: s.uid, aqi: s.aqi, tms: s.time ? Date.parse(s.time) : NaN }));
+      const recent = list.filter(s => s.ageH === null || s.ageH <= 72);
+      stationCache = window.AWST ? recent.filter(s => !AWST.isBroken({ uid: s.uid, aqi: s.aqi }, all, CK)) : recent;
+      const hidden = recent.length - stationCache.length;
+      m.textContent = stationCache.length + " stations. Tap the one nearest your home." + (hidden ? " (" + hidden + (hidden === 1 ? " station is" : " stations are") + " not working right now, so " + (hidden === 1 ? "it is" : "they are") + " not shown.)" : "");
       $("#nearSt").hidden = !("geolocation" in navigator);
       drawList(stationCache);
     }).catch(() => {
@@ -383,10 +393,8 @@
     const st = dayState(n);
     if (st === "lock") { w.appendChild(el("div", "note", "Day " + n + " opens on " + esc(pretty(dateOfDay(n))) + ".")); return; }
     if (S.days[n]) { const sc = summaryCard(n); w.appendChild(sc); allTimes(n, sc); return; }
-    const fc = formCard(n, st === "missed");
-    w.appendChild(fc);
-    /* look first, then check: the station numbers appear only after the guess is locked */
-    if (draftOf(n).gAt) allTimes(n, fc);
+    /* the station numbers at all three times appear once the day is saved (not before: the student reads them from aqicn.org) */
+    w.appendChild(formCard(n, st === "missed"));
   }
 
   function catChip(c, on) {
@@ -397,11 +405,15 @@
 
   function formCard(n, late) {
     const d = draftOf(n);
+    const past = dateOfDay(n) !== hanoiDate();
     const card = el("div", "card");
     const head = el("div");
     head.innerHTML = '<div class="eyebrow">Day ' + n + ' · ' + esc(pretty(dateOfDay(n))) + '</div>' +
       '<h2 style="font-size:22px">Look first. Then check.</h2>' +
-      (late ? '<div class="note">Catching up. That is fine — this day will show as <b>entered late</b>, so be honest: only fill it in if you checked on that day (for example, you wrote it in your book).</div>' : '');
+      (d.back ? '<div class="note back"><b>Your teacher sent this day back:</b> the numbers did not match your station. ' +
+          (past ? 'If you wrote the real numbers down on that day, type them again. If you did not, leave this day empty — that is OK. · Nếu em đã ghi lại số thật của hôm đó, hãy nhập lại. Nếu không, hãy để trống ngày này.'
+            : 'Look at your station again and type exactly what it shows. · Hãy xem lại trạm của em và nhập đúng số.') + '</div>'
+        : late ? '<div class="note">Catching up. That is fine — this day will show as <b>entered late</b>, so be honest: only fill it in if you checked on that day (for example, you wrote it in your book). Your numbers are checked against what your station recorded that day.</div>' : '');
     card.appendChild(head);
 
     /* step 1 */
@@ -439,17 +451,20 @@
     const s2 = el("div", "step");
     s2.innerHTML = '<h3><span class="num">2</span>Check your station</h3>' +
       '<p class="how">' + esc(S.st.name) + (S.st.url ? ' · <a href="' + esc(S.st.url) + '" target="_blank" rel="noopener">open it on aqicn.org</a>' : '') + '</p>' +
-      '<div class="row2"><div><label for="aqi">AQI (the big number)</label><input id="aqi" type="number" inputmode="numeric" min="0" max="999"></div>' +
+      '<div class="brokenbox" id="brk" hidden></div>' +
+      '<div class="row2"><div><label for="aqi">AQI (the big number)</label><input id="aqi" type="number" inputmode="numeric" min="0" max="999"><div class="chk" data-f="aqi"></div></div>' +
       '<div><label for="upd">Time on the page ("Updated…")</label><input id="upd" type="time"></div></div>' +
-      (six ? '<label>Day ' + n + ' bonus: write ALL six parts. Tick “not shown” if your station does not show one.</label><div class="row3" id="sixBox"></div>'
-        : '<div class="row2"><div><label for="pm">PM2.5</label><input id="pm" type="number" inputmode="numeric" min="0" max="999"></div>' +
+      (six ? '<label>Day ' + n + ' bonus: write ALL six parts. Tick “not shown” if your station does not show one.</label><div class="row3" id="sixBox"></div><div class="chk" data-f="pm25"></div>'
+        : '<div class="row2"><div><label for="pm">PM2.5</label><input id="pm" type="number" inputmode="numeric" min="0" max="999"><div class="chk" data-f="pm25"></div></div>' +
           '<div style="align-self:end"><label style="font-weight:500"><input type="checkbox" id="pmna"> PM2.5 not shown</label></div></div>') +
+      '<div class="guide" id="g2" hidden></div>' +
       '<label>Which part is the biggest today?</label><div class="chips" id="big"></div><div class="err" id="e2"></div>';
     card.appendChild(s2);
     const aqi = s2.querySelector("#aqi"), upd = s2.querySelector("#upd");
     aqi.value = d.aqi ?? ""; upd.value = d.upd || "";
     aqi.oninput = () => { d.aqi = aqi.value; save(); };
     upd.oninput = () => { d.upd = upd.value; save(); };
+    aqi.addEventListener("change", () => runCheck("aqi"));
     if (six) {
       d.six = d.six || {};
       const box = s2.querySelector("#sixBox");
@@ -460,14 +475,16 @@
         const cur = d.six[p.k] || {};
         i.value = cur.v ?? ""; c.checked = !!cur.na; i.disabled = !!cur.na;
         i.oninput = () => { d.six[p.k] = { v: i.value, na: false }; save(); };
-        c.onchange = () => { d.six[p.k] = { v: "", na: c.checked }; i.disabled = c.checked; if (c.checked) i.value = ""; save(); };
+        c.onchange = () => { d.six[p.k] = { v: "", na: c.checked }; i.disabled = c.checked; if (c.checked) i.value = ""; save(); if (p.k === "pm25") paintField("pm25", ""); };
+        if (p.k === "pm25") i.addEventListener("change", () => runCheck("pm25"));
         box.appendChild(cell);
       });
     } else {
       const pm = s2.querySelector("#pm"), na = s2.querySelector("#pmna");
       pm.value = d.pm25 ?? ""; na.checked = !!d.pm25na; pm.disabled = !!d.pm25na;
       pm.oninput = () => { d.pm25 = pm.value; save(); };
-      na.onchange = () => { d.pm25na = na.checked; pm.disabled = na.checked; if (na.checked) { pm.value = ""; d.pm25 = ""; } save(); };
+      pm.addEventListener("change", () => runCheck("pm25"));
+      na.onchange = () => { d.pm25na = na.checked; pm.disabled = na.checked; if (na.checked) { pm.value = ""; d.pm25 = ""; paintField("pm25", ""); } save(); };
     }
     const bigBox = s2.querySelector("#big");
     PARTS.concat([{ k: "notshown", en: "Can't tell" }]).forEach(p => {
@@ -478,19 +495,22 @@
 
     /* step 3 — class station */
     const cs = CFG.classStation;
-    const same = cs && S.st && cs.uid && S.st.uid === cs.uid;
-    let s3 = null;
+    const same = cs && S.st && cs.uid != null && String(S.st.uid) === String(cs.uid);
+    let s3 = null, clsOff = false;
     if (cs && cs.name && !same) {
       s3 = el("div", "step");
       s3.innerHTML = '<h3><span class="num">3</span>Check the class station</h3>' +
         '<p class="how">Everyone in the class checks this one too: <b>' + esc(cs.name) + '</b>' + (cs.url ? ' · <a href="' + esc(cs.url) + '" target="_blank" rel="noopener">open it</a>' : '') + '</p>' +
-        '<div class="row2"><div><label for="raqi">AQI</label><input id="raqi" type="number" inputmode="numeric" min="0" max="999"></div>' +
-        '<div><label for="rpm">PM2.5 (leave empty if not shown)</label><input id="rpm" type="number" inputmode="numeric" min="0" max="999"></div></div><div class="err" id="e3"></div>';
+        '<div class="note" id="clsOff" hidden>The class station is not showing a number right now — skip this step today.</div>' +
+        '<div class="row2"><div><label for="raqi">AQI</label><input id="raqi" type="number" inputmode="numeric" min="0" max="999"><div class="chk" data-f="raqi"></div></div>' +
+        '<div><label for="rpm">PM2.5 (leave empty if not shown)</label><input id="rpm" type="number" inputmode="numeric" min="0" max="999"></div></div>' +
+        '<div class="guide" id="g3" hidden></div><div class="err" id="e3"></div>';
       card.appendChild(s3);
       const ra = s3.querySelector("#raqi"), rp = s3.querySelector("#rpm");
       ra.value = d.raqi ?? ""; rp.value = d.rpm25 ?? "";
       ra.oninput = () => { d.raqi = ra.value; save(); };
       rp.oninput = () => { d.rpm25 = rp.value; save(); };
+      ra.addEventListener("change", () => runCheck("raqi"));
     }
 
     /* step 4 — what was happening */
@@ -522,6 +542,7 @@
     card.appendChild(s5);
     const ph = s5.querySelector("#ph"), prev = s5.querySelector("#phPrev");
     if (d.photo) prev.innerHTML = '<img class="thumb" alt="Your sky photo" src="' + d.photo + '">';
+    else if (d.hadPhoto) prev.innerHTML = '<p class="vn">Your photo for this day is already sent ✓ — add a new one only if you want to change it.</p>';
     ph.onchange = () => {
       const f = ph.files && ph.files[0]; if (!f) return;
       prev.textContent = "Getting your photo ready…";
@@ -529,10 +550,89 @@
         .catch(() => { prev.textContent = "That photo did not work. Try another one, or skip it."; });
     };
 
+    /* ── checking the numbers: with the station, as soon as they are typed ── */
+    const ownUid = S.st && S.st.uid != null && !S.st.custom ? String(S.st.uid) : null;
+    const input = f => f === "aqi" ? aqi : f === "raqi" ? (s3 && s3.querySelector("#raqi")) : (six ? s2.querySelector('#sixBox input[data-k="pm25"]') : s2.querySelector("#pm"));
+    const valueOf = f => f === "aqi" ? d.aqi : f === "raqi" ? d.raqi : six ? ((d.six || {}).pm25 || {}).v : d.pm25;
+    const wrong = {};
+    const ckOf = f => { d.ck = d.ck || {}; return (d.ck[f] = d.ck[f] || { fails: 0, until: 0 }); };
+    const waitText = until => { const s = Math.ceil((until - Date.now()) / 1000); return s > 0 ? "Too many tries. Look at the station page again — you can check again in " + s + " s." : "You can try again now."; };
+    let tick = null;
+    function paintField(f, st, r) {
+      const b = card.querySelector('.chk[data-f="' + f + '"]'); if (!b) return;
+      const i = input(f); if (i) i.classList.toggle("bad", st === "bad" || st === "wait");
+      const nm = f === "raqi" ? (cs || {}).name : S.st.name;
+      b.className = "chk" + (st ? " c-" + st : "");
+      b.innerHTML = st === "busy" ? "Checking with the station…"
+        : st === "ok" ? (r && r.by === "est" ? "✓ Looks right for that day" : "✓ Matches " + esc(nm))
+        : st === "bad" ? "✗ This does not match " + esc(nm) + (past ? " on that day." : " right now.")
+        : st === "none" ? "Could not check this number just now — you can still save."
+        : st === "wait" ? esc(waitText(ckOf(f).until)) : "";
+      wrong[f] = st === "bad" || st === "wait";
+      [2, 3].forEach(k => {
+        const g = card.querySelector("#g" + k); if (!g) return;
+        const on = k === 2 ? !!(wrong.aqi || wrong.pm25) : !!wrong.raqi;
+        if (on && !g.dataset.done) { g.innerHTML = guideHTML(k === 3 ? "class" : "own", past, n); g.dataset.done = "1"; }
+        g.hidden = !on;
+      });
+      if (st === "wait") {
+        clearInterval(tick);
+        tick = setInterval(() => {
+          const c = ckOf(f);
+          if (!b.classList.contains("c-wait")) { clearInterval(tick); return; }
+          if (c.until <= Date.now()) { c.until = 0; save(); clearInterval(tick); b.className = "chk"; b.textContent = "You can try again now."; return; }
+          b.textContent = waitText(c.until);
+        }, 1000);
+      }
+    }
+    async function runCheck(f) {
+      const v = int(valueOf(f));
+      if (v === null) { paintField(f, ""); return null; }
+      const c = ckOf(f);
+      if (c.until > Date.now()) { paintField(f, "wait"); return false; }
+      paintField(f, "busy");
+      let r;
+      try { r = await checkNumber(n, f, v); } catch (e) { r = { ok: null }; }
+      if (int(valueOf(f)) !== v) return null;   /* the number changed while we were checking */
+      if (r.broken) { paintField(f, ""); showBroken(); return false; }
+      if (r.ok === false) {
+        c.fails++;
+        if (c.fails >= CK.tries) { c.fails = 0; c.until = Date.now() + CK.waitSec * 1000; save(); paintField(f, "wait"); return false; }
+        save(); paintField(f, "bad"); return false;
+      }
+      c.fails = 0; save();
+      paintField(f, r.ok === true ? "ok" : "none", r);
+      return r;
+    }
+    function showBroken() {
+      const box = s2.querySelector("#brk"); if (!box || !box.hidden) return;
+      prepCheck(n).then(st => {
+        const feed = st.feeds[ownUid];
+        const near = AWST.nearestWorking(st.list || [], S.st.lat != null ? { lat: S.st.lat, lon: S.st.lon } : null, 6, CK, Date.now()).filter(x => String(x.uid) !== ownUid).slice(0, 5);
+        box.hidden = false;
+        box.innerHTML = '<b>Your station is not working right now.</b> ' +
+          (feed && feed.aqi == null ? 'Its page shows no AQI number (–). ' : 'Its numbers are far lower than every other station in Hanoi, so it is probably broken. ') +
+          'Choose a working station near you. Your saved days stay. · Trạm của em đang không hoạt động. Hãy chọn một trạm khác gần nhà em.' +
+          (near.length ? '<div class="stlist">' + near.map((x, i) => '<button class="st" type="button" data-i="' + i + '"><span class="nm">' + esc(x.name) + '<small>' + (x.km != null ? x.km.toFixed(1) + ' km from your old station' : '') + '</small></span><span class="me">Use this one</span></button>').join("") + '</div>'
+            : '<p>The list of stations did not load. Try again in a minute.</p>');
+        box.querySelectorAll("[data-i]").forEach(b => b.onclick = () => switchStation(near[+b.dataset.i]));
+        box.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+    /* as soon as step 2 opens: get the live readings ready; tell the student now if their station is broken */
+    prepCheck(n).then(st => {
+      if (!card.isConnected) return;
+      const feed = st.feeds[ownUid];
+      if (st.today && feed && AWST.isBroken(feed, st.list, CK)) showBroken();
+      const cf = cs && cs.uid != null ? st.feeds[String(cs.uid)] : null;
+      if (s3 && st.today && cf && cf.aqi == null) { clsOff = true; s3.querySelector("#clsOff").hidden = false; s3.querySelector(".row2").hidden = true; }
+      ["aqi", "pm25", "raqi"].forEach(f => { if (int(valueOf(f)) !== null && (f !== "raqi" || (s3 && !clsOff))) runCheck(f); });
+    });
+
     /* save */
     const sv = el("div", "btns"); const sb = el("button", "btn g", "Save Day " + n); sb.type = "button"; sv.appendChild(sb); card.appendChild(sv);
     const eS = el("div", "err"); card.appendChild(eS);
-    sb.onclick = () => {
+    sb.onclick = async () => {
       const bad = (i, msg, box) => { if (i) { i.classList.add("bad"); i.focus(); } (box || eS).textContent = msg; return false; };
       [aqi].forEach(i => i.classList.remove("bad"));
       s2.querySelector("#e2").textContent = ""; eS.textContent = "";
@@ -556,24 +656,45 @@
       }
       if (!d.big) return bad(null, "Choose which part is the biggest (or “Can't tell”).", s2.querySelector("#e2"));
       let rA = null, rP = null;
-      if (s3) {
+      if (s3 && !clsOff) {
         rA = int(d.raqi);
         if (rA === null || rA < 0 || rA > 999) return bad(s3.querySelector("#raqi"), "Type the class station's AQI.", s3.querySelector("#e3"));
         rP = int(d.rpm25);
       }
       if (!d.what.length) return bad(null, "Tick at least one thing (or “Nothing special”).", s4.querySelector("#e4"));
+
+      /* the numbers must match the station before the day is saved */
+      sb.disabled = true; sb.textContent = "Checking with the station…";
+      const reset = () => { sb.disabled = false; sb.textContent = "Save Day " + n; };
+      const st = await prepCheck(n);
+      const feed = st.feeds[ownUid];
+      if (st.today && feed && AWST.isBroken(feed, st.list, CK)) { showBroken(); reset(); eS.textContent = "Your station is not working right now — choose a working station in step 2 first."; return; }
+      const res = {};
+      for (const f of ["aqi"].concat(pm25 !== null ? ["pm25"] : []).concat(rA !== null ? ["raqi"] : [])) {
+        const r = await runCheck(f);
+        if (r === false) {
+          reset();
+          eS.textContent = f === "raqi" ? "The class station number does not match — look at the steps in step 3." : "Your numbers do not match your station — look at the steps in step 2.";
+          const i = input(f); if (i) i.focus();
+          return;
+        }
+        res[f] = r;
+      }
+
       const now = Date.now();
       const isLate = hanoiDate(new Date(now)) !== dateOfDay(n);
+      const pack = r => r && r.ok !== undefined ? { ok: r.ok, by: r.by || null, r: r.r == null ? null : r.r } : null;
       const rec = {
         date: dateOfDay(n), at: now, late: isLate,
         g: { sky: d.sky, guess: d.guess, at: d.gAt },
-        a: { aqi: A, pm25: pm25, pm25na: six ? (sixOut.pm25 === null) : !!d.pm25na, big: d.big, upd: d.upd || "" },
-        what: d.what.slice(), note: txt(d.note), photo: !!d.photo
+        a: { aqi: A, pm25: pm25, pm25na: six ? (sixOut.pm25 === null) : !!d.pm25na, big: d.big, upd: d.upd || "", st: S.st.uid },
+        what: d.what.slice(), note: txt(d.note), photo: !!d.photo || !!d.hadPhoto,
+        chk: { aqi: pack(res.aqi), pm25: pack(res.pm25), raqi: pack(res.raqi), at: now }
       };
       if (six) rec.six = sixOut;
-      if (s3) rec.ref = { aqi: rA, pm25: rP, uid: CFG.classStation.uid || null };
-      else if (same) rec.ref = { aqi: A, pm25: pm25, uid: CFG.classStation.uid || null, same: true };
-      sb.disabled = true; sb.textContent = "Saving…";
+      if (s3) rec.ref = clsOff ? { aqi: null, pm25: null, uid: cs.uid, nodata: true } : { aqi: rA, pm25: rP, uid: cs.uid };
+      else if (same) rec.ref = { aqi: A, pm25: pm25, uid: cs.uid, same: true };
+      sb.textContent = "Saving…";
       const photo = d.photo;
       S.days[n] = rec;
       if (photo) makeThumb(photo).then(t => { S.thumbs[n] = t; saveLocal(); }).catch(() => {});
@@ -584,6 +705,127 @@
       Promise.all(jobs).finally(() => { renderWeek(); renderDay(); renderExtra(); const r = $("#result"); if (r) r.scrollIntoView({ behavior: "smooth", block: "center" }); });
     };
     return card;
+  }
+
+  /* ───────── checking a number against the station (live reading, saved readings, or the estimate) ───────── */
+  const CHK = {};
+  function prepCheck(n, force) {
+    const date = dateOfDay(n), today = date === hanoiDate(), cs = CFG.classStation;
+    const own = S.st && S.st.uid != null && !S.st.custom ? String(S.st.uid) : null;
+    const cls = cs && cs.uid != null ? String(cs.uid) : null;
+    const k = [n, own, cls, date].join("|"), cur = CHK[n];
+    if (cur && cur.k === k && !force && Date.now() - cur.at < 3 * 60000) return cur.ready;
+    const st = { k, at: Date.now(), today, feeds: {}, data: {}, list: null, est: {} };
+    CHK[n] = st;
+    if (!window.AWST) { st.ready = Promise.resolve(st); return st.ready; }
+    const db = window.AWSYNC && AWSYNC.available() ? AWSYNC.stationDb() : null;
+    const jobs = [];
+    [own, cls].filter((u, i, a) => u != null && a.indexOf(u) === i).forEach(uid => {
+      if (today) jobs.push(AWST.waqiFeed(fetchFn, C.waqiToken, uid).then(f => { st.feeds[uid] = f; }).catch(() => { st.feeds[uid] = null; }));
+      if (db) jobs.push(Promise.all(["stationLog", "stationHist", "stationEst"].map(p => db.get(p + "/s" + uid + "/" + date).catch(() => null)))
+        .then(([l, h, e]) => { st.data[uid] = { l, h, e }; }));
+    });
+    if (today) jobs.push(AWST.waqiBounds(fetchFn, C.waqiToken, C.bounds).then(l => { st.list = l; }).catch(() => {}));
+    st.ready = Promise.race([Promise.all(jobs), new Promise(r => setTimeout(r, 9000))]).then(() => {
+      /* every live reading we see helps the checker later (a number read now, saved in an hour) */
+      if (db) Object.keys(st.feeds).forEach(uid => { const f = st.feeds[uid]; if (f && !AWST.isBroken(f, st.list, CK)) AWST.saveHist(db, uid, f, Date.now()).catch(() => {}); });
+      return st;
+    });
+    return st.ready;
+  }
+  async function checkNumber(n, f, v, again) {
+    const st = await prepCheck(n, again);
+    const d = draftOf(n), date = dateOfDay(n), cs = CFG.classStation || {};
+    const uid = f === "raqi" ? (cs.uid != null ? String(cs.uid) : null) : (S.st && S.st.uid != null && !S.st.custom ? String(S.st.uid) : null);
+    if (uid == null) return { ok: null };
+    const feed = st.feeds[uid];
+    if (f !== "raqi" && st.today && feed && AWST.isBroken(feed, st.list, CK)) return { ok: null, broken: true };
+    const x = st.data[uid] || {}, wrap = v2 => v2 ? { ["s" + uid]: { [date]: v2 } } : null;
+    const R = AWST.refs({ uid, date, slot: S.slot, now: Date.now(), live: feed ? [feed] : [], log: wrap(x.l), hist: wrap(x.h), est: wrap(x.e), upd: AWST.hm(d.upd), from: d.gAt, at: Date.now() });
+    const field = f === "raqi" ? "aqi" : f;
+    if (!R.real.some(r => r[field] != null) && !(R.est && R.est[field] != null)) {
+      const e = await estFor(st, uid, date);
+      if (e) R.est = { aqi: e.aqi, pm25: e.pm25 == null ? null : e.pm25 };
+    }
+    const r = AWST.judge(v, R, field, CK);
+    /* the station may have updated since we last looked: read it again once before saying no */
+    if (r.ok === false && !again && st.today && Date.now() - st.at > 30000) return checkNumber(n, f, v, true);
+    return r;
+  }
+  /* nothing saved for that day: ask the model (Open-Meteo) directly */
+  function estFor(st, uid, date) {
+    if (st.est[uid] !== undefined) return Promise.resolve(st.est[uid]);
+    const feed = st.feeds[uid];
+    const ll = S.st && String(S.st.uid) === uid && S.st.lat != null ? { lat: S.st.lat, lon: S.st.lon } : feed && feed.geo ? { lat: feed.geo[0], lon: feed.geo[1] } : null;
+    const where = ll ? Promise.resolve(ll) : (window.AWSYNC && AWSYNC.available() ? AWSYNC.getPath("stationMeta/s" + uid) : Promise.resolve(null));
+    const job = where.then(m => m && m.lat != null ? AWST.estimateAt({ fetch: fetchFn, lat: m.lat, lon: m.lon, date, slot: S.slot }) : null).catch(() => null);
+    return Promise.race([job, new Promise(r => setTimeout(() => r(null), 8000))]).then(e => { st.est[uid] = e || null; return st.est[uid]; });
+  }
+  /* how to find the right number — shown under a number that does not match */
+  function guideHTML(which, past, n) {
+    const cs = CFG.classStation || {};
+    const nm = which === "class" ? cs.name : S.st.name, url = which === "class" ? cs.url : S.st.url;
+    const open = which === "class" ? "Open the class station" : "Open my station";
+    if (past) return '<b>That number does not match what ' + esc(nm) + ' recorded on ' + esc(pretty(dateOfDay(n))) + ' at your time.</b>' +
+      '<p>Only fill in a past day if you wrote the numbers down on that day. If you did not, leave this day empty — that is OK. · Chỉ điền ngày cũ nếu em đã ghi lại số của hôm đó. Nếu không, hãy để trống ngày này.</p>' +
+      '<p>If you did write them down, check you are typing the numbers for <b>' + esc(nm) + '</b>: the AQI is the big number, PM2.5 is the first number in the PM2.5 row.</p>' + whereHTML(nm);
+    return '<b>That number does not match ' + esc(nm) + ' right now.</b> <span class="vn">Số này không khớp với trạm ' + esc(nm) + '.</span>' +
+      '<ol><li>Tap <b>' + open + '</b>. Check the name at the top is <b>' + esc(nm) + '</b> — not another station. <span class="vn">Kiểm tra đúng tên trạm.</span></li>' +
+      '<li>The <b>AQI</b> is the big number in the coloured box at the top — not the temperature and not the forecast. <span class="vn">AQI là số to trong ô màu ở trên cùng.</span></li>' +
+      '<li><b>PM2.5</b> is in the list under it: the <b>PM2.5</b> row, the first number. <span class="vn">PM2.5 là số đầu tiên ở dòng PM2.5.</span></li>' +
+      '<li>Type exactly what you see now — the numbers change during the day. <span class="vn">Gõ đúng số em thấy bây giờ.</span></li></ol>' +
+      (url ? '<a class="btn sm" href="' + esc(url) + '" target="_blank" rel="noopener">' + open + '</a>' : '') + whereHTML(nm);
+  }
+  function whereHTML(nm) {
+    return '<details class="where"><summary>Show me where to look</summary><div class="aqmock" role="img" aria-label="Example of a station page on aqicn.org: the AQI is the big number at the top, PM2.5 is the first number in the PM2.5 row">' +
+      '<div class="mtop"><span class="mbig">87</span><div><b>' + esc(nm) + '</b><small>Moderate</small><small>Updated on Saturday 19:00</small></div></div>' +
+      '<table><tr><th></th><th>current</th><th>min</th><th>max</th></tr>' +
+      '<tr class="hi"><td>PM2.5</td><td><b>87</b></td><td>55</td><td>152</td></tr><tr><td>PM10</td><td>41</td><td>20</td><td>66</td></tr><tr class="no"><td>Temp.</td><td>29</td><td>26</td><td>34</td></tr></table>' +
+      '<ol class="mkeys"><li><b>AQI</b> = the big number at the top (here 87)</li><li><b>PM2.5</b> = the first number in the PM2.5 row</li><li><b>Updated…</b> = the time under the name</li><li>Not the temperature, humidity or wind</li></ol>' +
+      '<small class="vn">Example only — your station and numbers will be different, and the page looks a little different on a phone.</small></div></details>';
+  }
+  /* the student's station stopped working: move to a working one (saved days stay as they are) */
+  function switchStation(x) {
+    if (!x) return;
+    const old = S.st || {};
+    S.stPrev = (S.stPrev || []).concat([{ uid: old.uid, name: old.name || "", until: Date.now(), why: "not working" }]);
+    S.st = { uid: x.uid, name: x.name, custom: false, url: WAQI.link(x.uid), parts: [], lat: x.lat, lon: x.lon };
+    Object.keys(S.drafts).forEach(k => {
+      const dr = S.drafts[k]; if (!dr) return;
+      ["aqi", "pm25", "upd", "big"].forEach(f => { delete dr[f]; });
+      dr.pm25na = false; dr.six = {};
+      if (dr.ck) { delete dr.ck.aqi; delete dr.ck.pm25; }
+    });
+    Object.keys(CHK).forEach(k => { delete CHK[k]; });
+    registered = ""; save(); push();
+    WAQI.feed(x.uid).then(f => {
+      if (!S.st || S.st.uid !== x.uid) return;
+      S.st.url = f.url || S.st.url;
+      S.st.parts = PARTS.filter(p => f.parts[p.k] !== null).map(p => p.en);
+      save(true); renderSetup();
+    }).catch(() => {});
+    renderAll();
+    alertNote("Your station is now " + x.name + ". Your saved days stay.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  /* the teacher sent a day back: reopen it with the guess and notes kept, the numbers empty */
+  function applyBack(back) {
+    if (!back || typeof back !== "object") return false;
+    let changed = false;
+    Object.keys(back).forEach(n => {
+      const b = back[n], r = S.days[n];
+      if (!b || !b.at || !r || (r.at || 0) > b.at) return;
+      S.drafts[n] = { sky: r.g && r.g.sky, guess: r.g && r.g.guess, gAt: r.g && r.g.at, what: (r.what || []).slice(), note: r.note || "", hadPhoto: !!r.photo, back: { at: b.at } };
+      delete S.days[n]; changed = true;
+    });
+    if (changed) { saveLocal(); if (setupDone()) { renderWeek(); renderDay(); renderExtra(); } }
+    return changed;
+  }
+  let backCode = "";
+  function watchBack() {
+    if (!window.AWSYNC || !AWSYNC.available() || backCode === S.code) return;
+    const code = backCode = S.code;
+    AWSYNC.watchPath("sentBack/" + code, v => { if (code === S.code && applyBack(v)) push(); });
   }
 
   function int(v) { const s = txt(v); if (!/^\d{1,4}$/.test(s)) return null; return parseInt(s, 10); }
@@ -656,7 +898,7 @@
   function startCollector() {
     if (collecting || !window.AWST || !window.AWSYNC || !AWSYNC.available() || typeof fetch !== "function") return;
     collecting = true;
-    const run = () => { const db = AWSYNC.stationDb(); if (!db) return; AWST.collect({ db, fetch: (u, o) => fetch(u, o), token: C.waqiToken, after: 30, src: "app", day1: C.day1, days: C.days }).catch(() => {}); };
+    const run = () => { const db = AWSYNC.stationDb(); if (!db) return; AWST.collect({ db, fetch: (u, o) => fetch(u, o), token: C.waqiToken, after: 30, src: "app", day1: C.day1, days: C.days, bounds: C.bounds, check: CK }).catch(() => {}); };
     setTimeout(run, 4000 + Math.random() * 20000);
     setInterval(run, 4 * 60000 + Math.random() * 60000);
   }
@@ -763,5 +1005,5 @@
   const linkCode = (/[?&]code=([A-Za-z0-9]{6})(?:&|$)/.exec(location.search) || [])[1];
   if (linkCode) { try { history.replaceState(null, "", location.pathname); } catch (e) {} }
   if (linkCode && linkCode.toUpperCase() !== S.code) loadCode(linkCode.toUpperCase(), null);
-  else if (setupDone()) push();
+  else if (setupDone()) { push(); watchBack(); }
 })();

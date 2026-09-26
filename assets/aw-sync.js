@@ -90,12 +90,12 @@
     },
     clearAll() {
       if (!boot()) return Promise.resolve(false);
-      return Promise.all(["students", "photos", "photoFlags", "roster", "moved", "stationLog", "stationEst", "stationMeta", "stationEstAt"].map(k => ref(k).remove()))
+      return Promise.all(["students", "photos", "photoFlags", "roster", "moved", "sentBack", "stationLog", "stationEst", "stationMeta", "stationEstAt", "stationHist"].map(k => ref(k).remove()))
         .then(() => true).catch(e => { fail("could not clear the room", e); return false; });
     },
     removeStudent(code) {
       if (!boot()) return Promise.resolve(false);
-      return Promise.all([ref("students/" + code).remove(), ref("roster/" + code).remove()]).then(() => true).catch(e => { fail("could not remove", e); return false; });
+      return Promise.all([ref("students/" + code).remove(), ref("roster/" + code).remove(), ref("sentBack/" + code).remove()]).then(() => true).catch(e => { fail("could not remove", e); return false; });
     },
 
     /* ---- any path in the room: station readings, roster, moved logs ---- */

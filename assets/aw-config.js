@@ -3,7 +3,7 @@
    and (later) the E11 lesson app. Edit values here only.
    ───────────────────────────────────────────────────────────── */
 window.AW = {
-  build: "2026-09-25",
+  build: "2026-09-26",
 
   /* Firebase rooms (same g6-science project as the Materials Bench) */
   room: "G6HW6",          // the 7-day homework log
@@ -25,6 +25,14 @@ window.AW = {
   lessonDay: "2026-09-30",
   lessonLabel: "Wednesday 30 September, period 3",
   bookPage: "34",
+
+  /* Checking students' numbers against their station (homework page).
+     tol: a number must be within this many points of the station's reading (AQI, PM2.5, class-station AQI).
+     A past day with no saved station reading is compared with the model estimate instead, and only numbers
+     outside [estimate × estLow − estPad, estimate × estHigh + estPad] are rejected (the model can be far off).
+     After `tries` wrong numbers in a row the student waits `waitSec` seconds before the next check.
+     A station counts as not working if its page shows no AQI, or its AQI is below brokenShare × the Hanoi median. */
+  check: { tol: 10, estLow: 0.25, estHigh: 3, estPad: 10, tries: 3, waitSec: 30, brokenShare: 0.33 },
 
   /* Hanoi box for finding stations: south, west, north, east */
   bounds: [20.85, 105.65, 21.20, 106.05],

@@ -2,8 +2,9 @@
 //
 // Each run:
 //   1. lists every station a student chose, plus the class station;
-//   2. if it is inside a time window (morning, after school, evening), saves each station's reading once;
-//   3. copies the readings students typed on time, so classmates at the same station can compare;
+//   2. if it is inside a time window (morning, after school, evening), saves each working station's reading once
+//      (and notes a fresh reading every 20 minutes, which the homework page's number checker compares with);
+//   3. copies the readings students typed on time (only numbers that match the station), so classmates at the same station can compare;
 //   4. fills times nobody measured with a computer-model estimate (Open-Meteo, CAMS), marked "estimate".
 // It uses only the files already in this repository: assets/aw-config.js, assets/firebase-config.js, assets/aw-stations.js.
 //
@@ -62,10 +63,10 @@ try {
   const changed = await S.syncRoster({ db, students, now: NOW });
   if (changed) console.log(`Roster: ${changed} names updated (for "Find my Air Watch").`);
   if (MODE !== "fill") {
-    const r = await S.collect({ db, fetch, token: AW.waqiToken, now: NOW, after: 60, src: "gh", day1: AW.day1, days: AW.days, waqiBase: process.env.WAQI_BASE });
+    const r = await S.collect({ db, fetch, token: AW.waqiToken, now: NOW, after: 60, src: "gh", day1: AW.day1, days: AW.days, waqiBase: process.env.WAQI_BASE, bounds: AW.bounds, check: AW.check });
     console.log(r.slot ? `Window ${r.slot}: saved ${r.saved}, already there ${r.had}, not updating ${r.stale}, failed ${r.failed}.` : "Not inside a time window — no readings saved now.");
   }
-  const copied = await S.copyClassmates({ db, students });
+  const copied = await S.copyClassmates({ db, students, check: AW.check, now: NOW });
   console.log(`Students' readings shared: ${copied}.`);
   const e = await S.estimate({ db, fetch, now: NOW, day1: AW.day1, days: AW.days, omBase: process.env.OM_BASE });
   console.log(`Estimates: ${e.cells} times at ${e.stations} stations${e.failed ? `, ${e.failed} stations failed` : ""}.`);

@@ -246,7 +246,7 @@
       const c = CAT(d.a.aqi), right = c && d.g && d.g.guess === c.k;
       h += '<button class="mday" data-code="' + esc(code) + '" data-day="' + i + '"><i>Day ' + i + '</i><span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + d.a.aqi + '</span><em>' + (right ? "eyes ✓" : "eyes ✗") + '</em></button>';
     }
-    return h + '</div>' + (filled ? '<p class="vn filledn">Grey days: not logged — the number is the station’s (≈ = estimate). No guess, so no ✓ or ✗.</p>' : '');
+    return h + '</div>' + (filled ? '<p class="vn filledn">Grey days: not logged, or the number did not match the station — the number shown is the station’s (≈ = estimate). No ✓ or ✗.</p>' : '');
   }
 
   let bindWeek = () => {}, repaintWeek = () => {};

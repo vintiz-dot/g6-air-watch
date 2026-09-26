@@ -76,6 +76,12 @@ worst day and why — then **Hand in**.
 
 Missed a day? They can catch up; it is saved as **entered late**, with the real time it was typed.
 
+**The numbers are checked.** When a student types the AQI, the PM2.5 or the class station's AQI, the page
+compares it with that station (within 10 points). A number that does not match is not saved: the page
+shows how to find the right one (the right station, the big number, the PM2.5 row, with a picture) but
+never the number itself. If their station has stopped working, the page says so and offers the nearest
+working stations. Details in **4c**.
+
 **My question.** Under the day, every student writes ONE question for the lesson (with the four
 starters) and can improve it any day. On screen 2 each pair sees both partners' questions and picks one.
 
@@ -98,6 +104,8 @@ by itself).
 - **Station readings** — every chosen station at 6:30–7:30, 16:30–17:30 and 19:00–20:00, day by day:
   a filled square is a real reading, a dashed one an estimate. Download them as a CSV too.
 - **Questions for the lesson** — every student's question, by class.
+- **Numbers to check** — saved days with a number that does not match the station (⚠ in the table),
+  each with a **Send back** button. Every day in a student's full week has **Send back** too.
 
 ---
 
@@ -109,21 +117,46 @@ never a guess, a note or a photo**:
 
 1. **In each time window, any open homework page** (a student's or yours) saves every chosen station
    once. Leave `homework-teacher.html` open on a computer to be safe.
-2. **The GitHub job** does the same at about 6:50, 16:50 and 19:20 even if no page is open
-   (`tools/air-watch-readings.mjs`, started by a workflow file). **To switch it on**, move
-   `tools/air-watch-readings.yml` into the folder `.github/workflows/` (GitHub only runs workflow files
-   from there), then commit and push. On github.com instead: **Add file → Create new file**, name it
-   `.github/workflows/air-watch-readings.yml`, paste the file's text, **Commit**. To test it: GitHub →
-   **Actions** → *Air Watch station readings* → **Run workflow**. The teacher page then shows
-   *GitHub job: last reading …*.
+2. **The GitHub job** does the same at about 6:50, 16:50 and 19:20 even if no page is open:
+   `.github/workflows/air-watch-readings.yml` (GitHub only runs workflow files from that folder) starts
+   `tools/air-watch-readings.mjs`. To test it: GitHub → **Actions** → *Air Watch station readings* →
+   **Run workflow**. The teacher page then shows *GitHub job: last reading …* (readings are only saved
+   inside the three time windows).
 3. **Readings students typed on time** are shared, so classmates at the same station see them.
 4. **Times nobody measured** (mostly 23–25 September, before this started) get an **estimate** from a
    computer model — Open-Meteo (CAMS model, CC BY 4.0) — always marked **≈ estimate**. Estimates can be
    quite different from a station, which is itself a good question for E12.
 
-Students see all three times under each saved day (after they have locked their guess). In the lesson
+Students see all three times under each saved day (only after saving, so they cannot copy them). In the lesson
 they appear on screen 1 (days a student missed, marked *station* or *estimate*), screen 5 (the time and
 place charts) and screen 6 (the table for Talk & Write Q2).
+
+---
+
+## 4c · Checking the numbers
+
+Settings are in `assets/aw-config.js` → `check` (margin 10 points, 3 tries, 30 seconds, and so on).
+
+- **Today:** the page reads the station live (the same data as aqicn.org) as soon as the student locks
+  the guess, and checks each number when they leave the box and again on **Save**. It also accepts the
+  station's readings from the time they looked, the time window, or the “Updated” time they typed, so a
+  station that updates while they type is fine.
+- **A past day (entered late):** compared with the station's saved readings for that day and window.
+  For times with no saved reading (mostly 23–25 September), it uses the model estimate with a wide
+  margin, so only numbers far off (like 4 on a day around 100) are rejected. The page tells students
+  to leave a past day empty if they did not write the numbers down that day.
+- **Three wrong numbers in a row** → a 30-second wait before the next check (no guessing games).
+- **Nothing to compare with** (no internet, the station and the model both unavailable) → the day saves,
+  marked *not checked*; your page checks it again later.
+- **A station that is not working** — its page shows no AQI (“–”), or its AQI is below a third of the
+  Hanoi median (in September 2026: *Hanoi, Vietnam*, *Hanoi US Embassy* and the two *Hà Nội/…* stations
+  showed “–”) — is not offered when setting up. A student already on one is asked to choose one of the
+  nearest working stations; their saved days stay, and your page shows the change.
+- **Your page** flags every saved day that does not match (also older days saved before the checker)
+  and lets you **Send back** a day: it reopens on the student's page with their guess and notes kept,
+  and they type the numbers again (or leave a past day empty).
+- **Shared data:** numbers that do not match are never shared with classmates, and the lesson leaves
+  them out (screen 1 shows the station's number for that day instead).
 
 ---
 
@@ -211,4 +244,4 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 - **Two laptops choose the same station:** the teacher view shows a warning on both cards.
 - **Never press “Start a new session” during the lesson** — it clears every answer (it asks twice).
 
-Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-25. PM2.5 size picture: U.S. EPA (public domain).
+Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-26. PM2.5 size picture: U.S. EPA (public domain).

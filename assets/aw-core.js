@@ -123,8 +123,13 @@
     },
     endSession: () => upd(() => L("state"), { live: false, timerEnd: null, pausedLeft: null, endedAt: LS.now() }, "ending the session").then(ok => { if (ok) LS.logEvent("end", {}); return ok; }),
 
-    /* homework room (read) */
-    watchHomework: fn => on(() => H("students"), fn, {}),
+    /* homework room (read). The station readings come too: days whose numbers do not match the station are left out (HW.days) */
+    watchHomework: fn => {
+      let last = null, sig = "";
+      const badSig = v => Object.keys(v || {}).map(code => { const s = v[code] || {}, ds = s.days || {}; return Object.keys(ds).filter(n => ds[n] && ds[n].a && badDay(s, ds[n])).map(n => code + ":" + n).join(","); }).join("|");
+      hwCtx(() => { if (!last) return; const g = badSig(last); if (g !== sig) { sig = g; fn(last); } });   /* repaint only when a day's check changes */
+      on(() => H("students"), v => { last = v || {}; sig = badSig(last); fn(v); }, {});
+    },
     watchHomeworkConfig: fn => on(() => H("config"), fn, {}),
     watchPhotoFlags: fn => on(() => H("photoFlags"), fn, {}),
     /* station readings at all three times (saved by the homework pages / GitHub job) and estimates */
@@ -134,9 +139,23 @@
   };
 
   /* ───────── homework statistics ───────── */
+  /* station readings for checking students' numbers (loaded once, for every page that reads the homework) */
+  const HX = { log: {}, hist: {}, est: {}, on: false, fns: [] };
+  function hwCtx(onChange) {
+    HX.fns.push(onChange);
+    if (HX.on) return; HX.on = true;
+    let t = null;
+    const ping = () => { clearTimeout(t); t = setTimeout(() => HX.fns.forEach(f => { try { f(); } catch (e) { console.error(e); } }), 400); };
+    on(() => H("stationLog"), v => { HX.log = v || {}; ping(); }, {});
+    on(() => H("stationHist"), v => { HX.hist = v || {}; ping(); }, {});
+    on(() => H("stationEst"), v => { HX.est = v || {}; ping(); }, {});
+  }
+  const badDay = (s, d) => !!(window.AWST && s && d && d.a && window.AWST.verdict(s, d, { log: HX.log, hist: HX.hist, est: HX.est, check: C.check, now: Date.now() }).v === "bad");
   const HW = {
     list: students => Object.keys(students || {}).map(code => Object.assign({ code }, students[code])),
-    days: s => Object.keys((s && s.days) || {}).map(Number).filter(n => s.days[n] && s.days[n].a).sort((a, b) => a - b).map(n => Object.assign({ n }, s.days[n])),
+    /* a student's saved days — without days whose numbers do not match the station (the teacher can send those back) */
+    days: s => Object.keys((s && s.days) || {}).map(Number).filter(n => s.days[n] && s.days[n].a && !badDay(s, s.days[n])).sort((a, b) => a - b).map(n => Object.assign({ n }, s.days[n])),
+    bad: (s, d) => badDay(s, d),
     guessScore(students) {
       let right = 0, total = 0;
       HW.list(students).forEach(s => HW.days(s).forEach(d => { const c = CAT(d.a.aqi); if (!c || !d.g) return; total++; if (d.g.guess === c.k) right++; }));
@@ -167,7 +186,13 @@
       if (!d) return null;
       return { aqi: d.a.aqi, six: d.six, date: d.date };
     },
-    photoAqi(students, code, day) { const s = (students || {})[code]; const d = s && s.days && s.days[day]; return d && d.a ? d.a.aqi : null; },
+    photoAqi(students, code, day) {
+      const s = (students || {})[code]; const d = s && s.days && s.days[day];
+      if (!d || !d.a) return null;
+      if (!badDay(s, d)) return d.a.aqi;
+      const uid = window.AWST ? window.AWST.dayStation(s, d) : null, x = uid ? HW.stationCell(HX.log, HX.est, uid, d.date, s.slot) : null;
+      return x ? x.aqi : null;   /* the number did not match: use the station's */
+    },
     /* a station's number for one day and time window: the station record, a classmate's reading, or an estimate */
     stationCell(log, est, uid, date, slot) { return (window.AWST && uid) ? window.AWST.cell(log, est, uid, date, slot) : null; },
     /* screen 5 — time: the class station at all three times; place: every home station over the same windows */

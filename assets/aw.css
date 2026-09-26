@@ -160,3 +160,35 @@ code{background:var(--soft);padding:1px 6px;border-radius:6px;font-size:14px}
 .qlist{margin:6px 0 0;padding-left:22px}
 .qlist li{margin:0 0 8px}
 .duprow{display:flex;gap:12px;align-items:center;justify-content:space-between;border-top:1px solid var(--line);padding:10px 0;font-size:14px}
+
+/* checking students' numbers against the station */
+.chk{font-size:14px;margin-top:4px;color:var(--muted)}
+.chk:empty{display:none}
+.chk.c-ok{color:var(--green);font-weight:600}
+.chk.c-bad,.chk.c-wait{color:var(--crimson);font-weight:600}
+.chk.c-busy{font-style:italic}
+input.bad{box-shadow:0 0 0 2px rgba(204,75,55,.22)}
+.guide{margin:10px 0 4px;padding:12px 14px;border-radius:12px;background:var(--badBg);border:1px solid var(--crimson);color:var(--text);font-size:15px}
+.guide ol{margin:8px 0 8px 20px;padding:0}.guide li{margin:3px 0}.guide p{margin:6px 0}.guide .btn{margin:4px 0}
+.guide .vn,.brokenbox .vn{font-size:13px}
+.brokenbox{margin:8px 0 10px;padding:12px 14px;border-radius:12px;background:var(--warnBg);border:1px solid var(--warnLine);color:var(--warnInk)}
+.brokenbox .stlist{margin-top:10px}
+.note.back{background:var(--badBg);border-color:var(--crimson);color:var(--badInk)}
+details.where summary{cursor:pointer;font-weight:600;margin-top:8px;color:var(--teal)}
+.aqmock{margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:#FFFFFF;color:#1F2A30;max-width:440px}
+.aqmock .mtop{display:flex;gap:12px;align-items:center}
+.aqmock .mbig{background:#F5D400;color:#3B3000;font-size:34px;font-weight:800;line-height:1;padding:10px 14px;border-radius:8px;outline:3px solid #CC4B37;outline-offset:3px}
+.aqmock .mtop b{display:block}.aqmock .mtop small{display:block;color:#5A6A72;font-size:13px}
+.aqmock table{width:100%;margin-top:10px;border-collapse:collapse;font-size:14px}
+.aqmock th,.aqmock td{padding:4px 6px;text-align:left;border-bottom:1px solid #E5EBEE}
+.aqmock th{color:#5A6A72;font-weight:600}
+.aqmock tr.hi td{background:#FFF3BF}
+.aqmock tr.hi td b{outline:3px solid #CC4B37;outline-offset:1px;border-radius:3px;padding:0 4px}
+.aqmock tr.no td{color:#9AA7AD;text-decoration:line-through}
+.aqmock .mkeys{margin:10px 0 6px 18px;padding:0;font-size:14px}
+.aqmock .vn{color:#5A6A72}
+.flagrow{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.flagrow:last-child{border-bottom:0}
+.flagrow small{display:block;color:var(--muted)}
+.flag{color:var(--crimson);font-weight:700;margin-left:3px;cursor:help}
+.ckc{white-space:nowrap}.ckc.bad{color:var(--crimson);font-weight:600}.ckc.good{color:var(--green)}

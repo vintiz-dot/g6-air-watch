@@ -50,7 +50,8 @@
     };
   }
 
-  function link(uid) { return "https://aqicn.org/city/@" + uid; }
+  /* stations from other networks have negative numbers; their pages live under /station/ */
+  function link(uid) { return +uid < 0 ? "https://aqicn.org/station/@" + (-uid) : "https://aqicn.org/city/@" + uid; }
 
   function distanceKm(a, b) {
     const R = 6371, rad = x => x * Math.PI / 180;

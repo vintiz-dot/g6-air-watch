@@ -207,7 +207,7 @@
         '<td>' + (d.a.pm25 === null || d.a.pm25 === undefined ? "–" : d.a.pm25) + '</td><td>' + esc(partName(d.a.big)) + '</td><td>' + esc(d.a.upd || "") + '</td>' +
         '<td>' + (d.ref ? (d.ref.nodata ? "no data" : d.ref.aqi) : "–") + '</td><td>' + esc((d.what || []).map(k => WHAT[k] || k).join(", ")) + (d.note ? '<br><i>' + esc(d.note) + '</i>' : '') + '</td>' +
         '<td>' + new Date(d.at).toLocaleString("en-GB", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (d.late ? ' <span class="late">late</span>' : '') + '</td>' +
-        '<td>' + (d.photo ? '<button class="btn sm ghost" data-ph="' + i + '">show</button>' : '') + '</td>' +
+        '<td>' + (d.photo ? '<span class="vn">✓ below</span>' : '') + '</td>' +
         '<td>' + checkCell(V) + '<br><button class="btn sm ghost" data-back="' + i + '">Send back</button></td></tr>';
       if (d.six) h += '<tr><td></td><td colspan="11" class="vn">Six parts: ' + PARTS.map(p => esc(p.en) + ' ' + (d.six[p.k] === null ? '–' : d.six[p.k])).join(' · ') + '</td></tr>';
     }
@@ -217,7 +217,7 @@
     h += '<div id="dPh" class="pgrid" style="margin-top:10px"></div>' +
       '<div class="btns"><button class="btn sm ghost" id="rm">Remove this student (test entries)</button><button class="btn sm ghost" id="cl">Close</button></div>';
     box.innerHTML = h;
-    box.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => showPhoto(code, +b.dataset.ph, $("#dPh")));
+    detailPhotos(code);
     box.querySelectorAll("[data-back]").forEach(b => b.onclick = () => armBack(b, code, +b.dataset.back));
     $("#cl").onclick = () => { SELECTED = null; box.hidden = true; };
     const rm = $("#rm");
@@ -407,25 +407,56 @@
   }
 
   /* ───────── photos ───────── */
+  const PHC = {};   /* "CODE_day" → the picture, so a repaint does not download it again */
+  let PKEYS = null, PKEYS_AT = 0;
+  /* every stored photo, also one whose day record is missing (so no photo is ever hidden) */
+  function photoKeys(fresh) {
+    if (!fresh && PKEYS && Date.now() - PKEYS_AT < 60000) return Promise.resolve(PKEYS);
+    return AWSYNC.listPhotoKeys().then(k => { PKEYS = k || []; PKEYS_AT = Date.now(); return PKEYS; });
+  }
+  const splitKey = k => { const m = /^(.+)_(\d+)$/.exec(k); return m ? [m[1], +m[2]] : null; };
   function fig(code, day, data) {
-    const s = STUDENTS[code] || {}; const d = (s.days || {})[day] || {};
-    const c = d.a ? CAT(d.a.aqi) : null; const key = code + "_" + day;
+    const s = STUDENTS[code] || {}; const d = (s.days || {})[day] || null;
+    const c = d && d.a ? CAT(d.a.aqi) : null; const key = code + "_" + day;
     const f = el("figure");
-    f.innerHTML = '<img alt="Sky photo, ' + esc(s.n) + ', day ' + day + '" src="' + data + '"><figcaption><span>' + esc(s.n || code) + ' · D' + day + ' · ' +
-      (c ? '<b style="color:' + c.col + '">AQI ' + d.a.aqi + '</b>' : '') + ' · guessed ' + esc(catName(d.g && d.g.guess)) + '</span><button class="star' + (FLAGS[key] === "star" ? " on" : "") + '" data-k="' + key + '" title="Use in class">★</button></figcaption>';
+    f.innerHTML = '<img alt="Sky photo, ' + esc(s.n || code) + ', day ' + day + '" src="' + data + '"><figcaption><span>' + esc(s.n || code) + ' · D' + day +
+      (d && d.a ? ' · ' + (c ? '<b style="color:' + c.col + '">AQI ' + d.a.aqi + '</b>' : '') + ' · guessed ' + esc(catName(d.g && d.g.guess)) : ' · <i>day not saved</i>') +
+      '</span><button class="star' + (FLAGS[key] === "star" ? " on" : "") + '" data-k="' + key + '" title="Use in class">★</button></figcaption>';
     const st = f.querySelector(".star");
     st.onclick = () => { const on = FLAGS[key] === "star"; AWSYNC.setPhotoFlag(code, day, on ? null : "star"); };
     return f;
   }
-  function showPhoto(code, day, into) {
-    AWSYNC.getPhoto(code, day).then(p => { if (p && p.d) into.appendChild(fig(code, day, p.d)); });
+  function getPhoto(code, day) {
+    const k = code + "_" + day;
+    if (PHC[k] !== undefined) return Promise.resolve(PHC[k]);
+    return AWSYNC.getPhoto(code, day).then(p => (PHC[k] = p && p.d ? p.d : null)).catch(() => null);
+  }
+  /* the open student's photos, in day order, without a click */
+  function detailPhotos(code) {
+    const s = STUDENTS[code] || {}, want = [];
+    for (let i = 1; i <= C.days; i++) { const d = daysOf(s)[i]; if (d && d.photo) want.push(i); }
+    photoKeys().then(keys => {
+      keys.map(splitKey).forEach(x => { if (x && x[0] === code && !want.includes(x[1])) want.push(x[1]); });
+      want.sort((a, b) => a - b);
+      return Promise.all(want.map(n => getPhoto(code, n)));
+    }).then(ds => {
+      const into = $("#dPh"); if (!into || SELECTED !== code) return;
+      into.innerHTML = "";
+      ds.forEach((d, i) => { if (d) into.appendChild(fig(code, want[i], d)); });
+    });
   }
   function loadPhotos() {
-    const wall = $("#phWall"); wall.innerHTML = ""; const g = el("div", "pgrid"); wall.appendChild(g);
-    const jobs = [];
-    list().forEach(s => Object.keys(daysOf(s)).forEach(k => { if (daysOf(s)[k] && daysOf(s)[k].photo) jobs.push([s.code, +k]); }));
-    if (!jobs.length) { wall.innerHTML = '<p class="vn">No photos yet.</p>'; return; }
-    jobs.forEach(([c, d]) => showPhoto(c, d, g));
+    const wall = $("#phWall"); wall.innerHTML = '<p class="vn">Loading…</p>';
+    photoKeys(true).then(keys => {
+      const jobs = {};
+      list().forEach(s => Object.keys(daysOf(s)).forEach(k => { if (daysOf(s)[k] && daysOf(s)[k].photo) jobs[s.code + "_" + k] = [s.code, +k]; }));
+      keys.map(splitKey).forEach(x => { if (x) jobs[x[0] + "_" + x[1]] = x; });
+      const all = Object.values(jobs).sort((a, b) => String((STUDENTS[a[0]] || {}).n || a[0]).localeCompare(String((STUDENTS[b[0]] || {}).n || b[0])) || a[1] - b[1]);
+      if (!all.length) { wall.innerHTML = '<p class="vn">No photos yet.</p>'; return; }
+      wall.innerHTML = '<p class="vn">' + all.length + (all.length === 1 ? ' photo' : ' photos') + '.</p>';
+      const g = el("div", "pgrid"); wall.appendChild(g);
+      Promise.all(all.map(([c, n]) => getPhoto(c, n))).then(ds => ds.forEach((d, i) => { if (d) g.appendChild(fig(all[i][0], all[i][1], d)); }));
+    });
   }
   function paintStars() { document.querySelectorAll(".star").forEach(b => b.classList.toggle("on", FLAGS[b.dataset.k] === "star")); }
 

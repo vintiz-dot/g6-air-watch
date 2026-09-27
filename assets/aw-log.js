@@ -64,13 +64,17 @@
   function push() {
     if (!window.AWSYNC || !AWSYNC.available() || txt(S.name).length < 2) { paintLive(); return Promise.resolve(false); }
     const code = S.code;
-    /* if the teacher joined this log with another one, carry on in that one;
-       if the teacher sent a day back, reopen it before saving (so it is not sent again) */
-    return Promise.all([AWSYNC.getPath("moved/" + code), AWSYNC.getPath("sentBack/" + code)]).then(([to, back]) => {
+    /* 1 · if the teacher joined this log with another one, carry on in that one;
+       2 · take in what other devices saved first (a phone and a laptop can share one log);
+       3 · if the teacher sent a day back, reopen it before saving (so it is not sent again) */
+    return Promise.all([AWSYNC.getPath("moved/" + code), AWSYNC.getPath("sentBack/" + code), AWSYNC.getStudent(code)]).then(([to, back, server]) => {
       if (to && to !== code) { loadCode(to); return false; }
-      applyBack(back);
+      if (code !== S.code) return false;
+      const got = mergeServer(server);
+      const reopened = applyBack(back);
+      if (got && !reopened) { saveLocal(); if (setupDone()) { renderSetup(); renderWeek(); renderDay(); renderExtra(); } }
       const data = payload();
-      return AWSYNC.saveStudent(code, data).then(r => {
+      return AWSYNC.mergeStudent(code, data).then(r => {
         paintLive(r);
         if (r && window.AWST) {
           const e = AWST.rosterEntry(data); delete e.up;
@@ -81,6 +85,23 @@
         return r;
       });
     });
+  }
+  /* days, the question and the hand-in saved on another device: keep the newest of each */
+  function mergeServer(v) {
+    if (!v || typeof v !== "object") return false;
+    let got = false;
+    const sd = v.days || {};
+    Object.keys(sd).forEach(k => {
+      const x = sd[k]; if (!x || !x.a) return;
+      const mine = S.days[k];
+      if (!mine || (x.at || 0) > (mine.at || 0)) { S.days[k] = x; delete S.drafts[k]; got = true; }
+    });
+    if (v.q && txt(v.q.t) && (!S.q || !txt(S.q.t) || (v.q.at || 0) > (S.q.at || 0))) { S.q = v.q; got = true; }
+    if ((v.subAt || 0) > (S.subAt || 0)) { S.sub = !!v.sub; S.subAt = v.subAt; if (v.refl) S.refl = v.refl; got = true; }
+    else if (v.refl && !txt(S.refl.why) && !txt(S.refl.look) && (txt(v.refl.why) || txt(v.refl.look))) { S.refl = v.refl; got = true; }
+    const list = x => x ? (Array.isArray(x) ? x : Object.values(x)).filter(Boolean) : [];
+    if (v.st && list(v.stPrev).length > list(S.stPrev).length) { S.st = v.st; S.stPrev = list(v.stPrev); got = true; }
+    return got;
   }
   let lastPushOk = false;
   function paintLive(r) {
@@ -846,8 +867,9 @@
       (r.six ? '<dt>Six parts</dt><dd>' + PARTS.map(p => esc(p.en) + ' ' + (r.six[p.k] === null ? '–' : r.six[p.k])).join(' · ') + '</dd>' : '') +
       '<dt>Happening</dt><dd>' + esc(r.what.map(k => (WHAT.find(w => w[0] === k) || [0, k])[1]).join(", ")) + (r.note ? ' — ' + esc(r.note) : '') + '</dd>' +
       '</dl>' +
-      (S.thumbs[n] ? '<img class="thumb" alt="Your sky photo" src="' + S.thumbs[n] + '">' : (r.photo ? '<p class="vn">Photo sent ✓</p>' : '')) +
+      (S.thumbs[n] ? '<img class="thumb" alt="Your sky photo" src="' + S.thumbs[n] + '">' : (r.photo ? '<div class="phslot"><p class="vn">Loading your photo…</p></div>' : '')) +
       '<div class="book">Now write it in your book, page ' + esc(C.bookPage) + ', Day ' + n + ': <b>' + (r.a.pm25 !== null ? 'PM2.5 = ' + r.a.pm25 : 'AQI = ' + r.a.aqi) + '</b>. Viết vào sách trang ' + esc(C.bookPage) + '.</div>';
+    if (r.photo && !S.thumbs[n]) loadThumb(n, card);
     const nx = nextOpenDay();
     if (nx) {
       const b = el("div", "btns"); const bb = el("button", "btn ghost", nx.label); bb.type = "button";
@@ -855,6 +877,16 @@
       b.appendChild(bb); card.appendChild(b);
     }
     return card;
+  }
+  /* a photo sent from another device: fetch it once, keep a small copy on this device */
+  function loadThumb(n, card) {
+    const slot = card.querySelector(".phslot"); if (!slot) return;
+    if (!window.AWSYNC || !AWSYNC.available()) { slot.innerHTML = '<p class="vn">Photo sent ✓</p>'; return; }
+    AWSYNC.getPhoto(S.code, n).then(p => {
+      if (!p || !p.d) { slot.innerHTML = '<p class="vn">Photo sent ✓</p>'; return; }
+      slot.innerHTML = '<img class="thumb" alt="Your sky photo" src="' + p.d + '">';
+      makeThumb(p.d).then(t => { S.thumbs[n] = t; saveLocal(); }).catch(() => {});
+    }).catch(() => { slot.innerHTML = '<p class="vn">Photo sent ✓</p>'; });
   }
   function partName(k) { if (k === "notshown") return "can't tell"; const p = PARTS.find(x => x.k === k); return p ? p.en : "?"; }
   function nextOpenDay() {

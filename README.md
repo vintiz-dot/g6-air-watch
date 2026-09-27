@@ -86,7 +86,9 @@ working stations. Details in **4c**.
 starters) and can improve it any day. On screen 2 each pair sees both partners' questions and picks one.
 
 **New phone, or the page forgot them?** On the first screen they choose **Find my Air Watch**, type
-their name and class, and tap their own log (it shows their station and days saved). They can also use
+their name and class, and tap their own log (it shows their station and days saved). One log can be
+used on several devices (a phone and a laptop): each page takes in the days saved on the others before
+it saves, so a device with an older copy never removes a day, and a sky photo shows on every device. They can also use
 **their own link** (tap *My code* at the top → *Copy my link*) or the 6-letter code. Setting up again
 with the same name and class asks *“Is it yours?”* first, so a student does not end up with two logs.
 If it happens anyway, your page shows **The same student twice?** → **Join** (the other device follows
@@ -99,7 +101,8 @@ by itself).
 - Who has joined, how many logged each day, who has handed in.
 - The class total: **how many guesses by looking were right** — the number that opens the lesson.
 - Every student's week in one table; tap a row for everything, including photos.
-- **Star** the sky photos you want to use in the lesson's opening (clear-looking sky, high AQI…).
+- **Star** the sky photos you want to use in the lesson's opening (clear-looking sky, high AQI…). A
+  student's photos also show under their week when you open it.
 - **Download all answers (CSV)** — one row per student per day, opens in Excel (now with each question).
 - **Station readings** — every chosen station at 6:30–7:30, 16:30–17:30 and 19:00–20:00, day by day:
   a filled square is a real reading, a dashed one an estimate. Download them as a CSV too.
@@ -244,4 +247,4 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 - **Two laptops choose the same station:** the teacher view shows a warning on both cards.
 - **Never press “Start a new session” during the lesson** — it clears every answer (it asks twice).
 
-Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-26. PM2.5 size picture: U.S. EPA (public domain).
+Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-27. PM2.5 size picture: U.S. EPA (public domain).

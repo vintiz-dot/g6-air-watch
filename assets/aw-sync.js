@@ -46,6 +46,16 @@
       return ref("students/" + code).set(clean(data)).then(() => { ok(); return true; })
         .catch(e => { fail("could not save your log", e); return false; });
     },
+    /* the student's page saves this way: each day is written on its own, so a day saved on another
+       device (a phone and a laptop can share one log) is never removed by an older copy */
+    mergeStudent(code, data) {
+      if (!boot()) return Promise.resolve(false);
+      const upd = {}, days = (data && data.days) || {};
+      Object.keys(data || {}).forEach(k => { if (k !== "days" && data[k] !== null && data[k] !== undefined) upd[k] = data[k]; });
+      Object.keys(days).forEach(n => { if (days[n]) upd["days/" + n] = days[n]; });
+      return ref("students/" + code).update(clean(upd)).then(() => { ok(); return true; })
+        .catch(e => { fail("could not save your log", e); return false; });
+    },
     getStudent(code) {
       if (!boot()) return Promise.resolve(null);
       return ref("students/" + code).once("value").then(s => s.val()).catch(e => { fail("could not load", e); return null; });
@@ -71,10 +81,11 @@
       try { r.on("value", s => fn(s.val() || {})); } catch (e) { fn({}); }
       return r;
     },
+    /* the names of every stored photo ("CODE_day"), read over REST without downloading the pictures */
     listPhotoKeys() {
-      if (!boot()) return Promise.resolve([]);
-      /* shallow read of keys only would need REST; read flags stored on students instead */
-      return Promise.resolve([]);
+      if (!ready || typeof fetch !== "function") return Promise.resolve([]);
+      const url = String(cfg.databaseURL).replace(/\/$/, "") + "/rooms/" + ROOM + "/photos.json?shallow=true";
+      return fetch(url).then(r => r.json()).then(v => (v && typeof v === "object") ? Object.keys(v) : []).catch(() => []);
     },
     getPhoto(code, day) {
       if (!boot()) return Promise.resolve(null);

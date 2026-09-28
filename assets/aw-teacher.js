@@ -140,7 +140,8 @@
   const daysOf = s => s.days || {};
   function rightCount(s) {
     let r = 0, n = 0;
-    Object.values(daysOf(s)).forEach(d => { if (!d || !d.a) return; n++; const c = CAT(d.a.aqi); if (c && d.g && d.g.guess === c.k) r++; });
+    /* catch-up days (copied from the station's record) have no guess: they do not count here */
+    Object.values(daysOf(s)).forEach(d => { if (!d || !d.a || !d.g || !d.g.guess) return; n++; const c = CAT(d.a.aqi); if (c && d.g.guess === c.k) r++; });
     return [r, n];
   }
   function paintProgress() {
@@ -159,7 +160,7 @@
   function chip(d, s) {
     if (!d || !d.a) return '<span class="vn">—</span>';
     const c = CAT(d.a.aqi), V = s ? vOf(s, d) : null;
-    return '<span class="aqi" style="background:' + (c ? c.col : "#ccc") + ';color:' + (c ? c.ink : "#000") + '">' + d.a.aqi + '</span>' + (d.late ? '<span class="late" title="entered late">*</span>' : '') +
+    return '<span class="aqi" style="background:' + (c ? c.col : "#ccc") + ';color:' + (c ? c.ink : "#000") + '">' + d.a.aqi + '</span>' + (d.catchup ? '<span class="late" title="catch-up: copied from the station record, no guess">c</span>' : d.late ? '<span class="late" title="entered late">*</span>' : '') +
       (V && V.v === "bad" ? '<span class="flag" title="' + esc(badText(V)) + '">⚠</span>' : '');
   }
   function badText(V) {
@@ -179,7 +180,7 @@
       for (let i = 1; i <= C.days; i++) h += '<td>' + chip(daysOf(s)[i], s) + '</td>';
       h += '<td>' + (n ? r + "/" + n : "–") + '</td><td>' + (s.sub ? "✓" : "") + '</td></tr>';
     });
-    h += '</tbody></table><p class="vn">* entered late (on a different day from the day it describes). ⚠ a number does not match the station — see “Numbers to check”.</p>';
+    h += '</tbody></table><p class="vn">* entered late (on a different day from the day it describes). c catch-up: the student joined late and copied the station’s record for that day (no guess, no photo). ⚠ a number does not match the station — see “Numbers to check”.</p>';
     t.innerHTML = h;
     t.querySelectorAll("tr.click").forEach(tr => tr.onclick = () => { SELECTED = tr.dataset.code; paintDetail(SELECTED); $("#detail").scrollIntoView({ behavior: "smooth", block: "start" }); });
   }
@@ -201,12 +202,12 @@
         const b = back[i];
         h += '<tr><td>' + i + '</td><td colspan="11" class="vn">' + (b && b.at ? 'sent back ' + esc(hhmm(b.at)) + ' — waiting for the student to redo it' : 'not logged') + '</td></tr>'; continue;
       }
-      const c = CAT(d.a.aqi); const right = c && d.g && d.g.guess === c.k;
+      const g = d.g || {}, c = CAT(d.a.aqi); const right = c && g.guess === c.k;
       const V = vOf(s, d);
-      h += '<tr><td>' + i + '</td><td>' + esc(SKY[d.g.sky] || "") + '</td><td>' + esc(catName(d.g.guess)) + (right ? ' ✓' : ' ✗') + '</td><td>' + chip(d, s) + '</td>' +
-        '<td>' + (d.a.pm25 === null || d.a.pm25 === undefined ? "–" : d.a.pm25) + '</td><td>' + esc(partName(d.a.big)) + '</td><td>' + esc(d.a.upd || "") + '</td>' +
+      h += '<tr><td>' + i + '</td><td>' + (g.sky ? esc(SKY[g.sky] || "") : d.catchup ? '<span class="tag">catch-up</span>' : '') + '</td><td>' + (g.guess ? esc(catName(g.guess)) + (right ? ' ✓' : ' ✗') : '<span class="vn">no guess</span>') + '</td><td>' + chip(d, s) + '</td>' +
+        '<td>' + (d.a.pm25 === null || d.a.pm25 === undefined ? "–" : d.a.pm25) + '</td><td>' + (d.catchup && d.a.big === "notshown" ? '—' : esc(partName(d.a.big))) + '</td><td>' + esc(d.a.upd || "") + '</td>' +
         '<td>' + (d.ref ? (d.ref.nodata ? "no data" : d.ref.aqi) : "–") + '</td><td>' + esc((d.what || []).map(k => WHAT[k] || k).join(", ")) + (d.note ? '<br><i>' + esc(d.note) + '</i>' : '') + '</td>' +
-        '<td>' + new Date(d.at).toLocaleString("en-GB", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (d.late ? ' <span class="late">late</span>' : '') + '</td>' +
+        '<td>' + new Date(d.at).toLocaleString("en-GB", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (d.catchup ? ' <span class="late">catch-up</span><br><span class="vn">copied ' + (d.a.src === "est" ? "the estimate" : "the station record") + '</span>' : d.late ? ' <span class="late">late</span>' : '') + '</td>' +
         '<td>' + (d.photo ? '<span class="vn">✓ below</span>' : '') + '</td>' +
         '<td>' + checkCell(V) + '<br><button class="btn sm ghost" data-back="' + i + '">Send back</button></td></tr>';
       if (d.six) h += '<tr><td></td><td colspan="11" class="vn">Six parts: ' + PARTS.map(p => esc(p.en) + ' ' + (d.six[p.k] === null ? '–' : d.six[p.k])).join(' · ') + '</td></tr>';
@@ -420,7 +421,7 @@
     const c = d && d.a ? CAT(d.a.aqi) : null; const key = code + "_" + day;
     const f = el("figure");
     f.innerHTML = '<img alt="Sky photo, ' + esc(s.n || code) + ', day ' + day + '" src="' + data + '"><figcaption><span>' + esc(s.n || code) + ' · D' + day +
-      (d && d.a ? ' · ' + (c ? '<b style="color:' + c.col + '">AQI ' + d.a.aqi + '</b>' : '') + ' · guessed ' + esc(catName(d.g && d.g.guess)) : ' · <i>day not saved</i>') +
+      (d && d.a ? ' · ' + (c ? '<b style="color:' + c.col + '">AQI ' + d.a.aqi + '</b>' : '') + (d.g && d.g.guess ? ' · guessed ' + esc(catName(d.g.guess)) : '') : ' · <i>day not saved</i>') +
       '</span><button class="star' + (FLAGS[key] === "star" ? " on" : "") + '" data-k="' + key + '" title="Use in class">★</button></figcaption>';
     const st = f.querySelector(".star");
     st.onclick = () => { const on = FLAGS[key] === "star"; AWSYNC.setPhotoFlag(code, day, on ? null : "star"); };
@@ -462,14 +463,14 @@
 
   /* ───────── export ───────── */
   function downloadCSV() {
-    const cols = ["code", "name", "class", "area", "station", "time_slot", "day", "date", "saved_at", "late", "sky", "guess", "aqi", "aqi_band", "guess_right", "pm25", "biggest", "page_updated", "class_aqi", "class_pm25", "happening", "note", "photo",
+    const cols = ["code", "name", "class", "area", "station", "time_slot", "day", "date", "saved_at", "late", "catch_up", "sky", "guess", "aqi", "aqi_band", "guess_right", "pm25", "biggest", "page_updated", "class_aqi", "class_pm25", "happening", "note", "photo",
       "six_pm25", "six_pm10", "six_o3", "six_no2", "six_so2", "six_co", "handed_in", "worst_day_why", "looking_sentence", "question", "check", "check_detail", "sent_back"];
     const rows = [cols];
     list().forEach(s => {
       for (let i = 1; i <= C.days; i++) {
         const d = daysOf(s)[i]; if (!d) continue;
-        const c = CAT(d.a.aqi), V = vOf(s, d);
-        rows.push([s.code, s.n, s.c, s.area, s.st ? s.st.name : "", s.slot, i, d.date, new Date(d.at).toISOString(), d.late ? "yes" : "no", d.g.sky, d.g.guess, d.a.aqi, c ? c.k : "", c && d.g.guess === c.k ? "yes" : "no",
+        const c = CAT(d.a.aqi), V = vOf(s, d), g = d.g || {};
+        rows.push([s.code, s.n, s.c, s.area, s.st ? s.st.name : "", s.slot, i, d.date, new Date(d.at).toISOString(), d.late ? "yes" : "no", d.catchup ? (d.a.src === "est" ? "copied estimate" : "copied record") : "", g.sky || "", g.guess || "", d.a.aqi, c ? c.k : "", g.guess ? (c && g.guess === c.k ? "yes" : "no") : "",
           d.a.pm25 == null ? "" : d.a.pm25, d.a.big, d.a.upd || "", d.ref ? d.ref.aqi : "", d.ref && d.ref.pm25 != null ? d.ref.pm25 : "", (d.what || []).join("|"), d.note || "", d.photo ? "yes" : "no",
           ...(d.six ? PARTS.map(p => d.six[p.k] == null ? "" : d.six[p.k]) : ["", "", "", "", "", ""]),
           s.sub ? "yes" : "no", s.refl ? s.refl.why || "" : "", s.refl ? s.refl.look || "" : "", s.q ? txt(s.q.t) : "",

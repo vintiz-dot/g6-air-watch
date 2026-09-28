@@ -3,7 +3,7 @@
    and (later) the E11 lesson app. Edit values here only.
    ───────────────────────────────────────────────────────────── */
 window.AW = {
-  build: "2026-09-27",
+  build: "2026-09-28c",
 
   /* Firebase rooms (same g6-science project as the Materials Bench) */
   room: "G6HW6",          // the 7-day homework log
@@ -33,6 +33,10 @@ window.AW = {
      After `tries` wrong numbers in a row the student waits `waitSec` seconds before the next check.
      A station counts as not working if its page shows no AQI, or its AQI is below brokenShare × the Hanoi median. */
   check: { tol: 10, estLow: 0.25, estHigh: 3, estPad: 10, tries: 3, waitSec: 30, brokenShare: 0.33 },
+
+  /* From this day on, a day can only be saved with a sky photo (a phone can send it by QR code).
+     Catch-up days copied from the station record never need one. */
+  photoFrom: "2026-09-28",
 
   /* Hanoi box for finding stations: south, west, north, east */
   bounds: [20.85, 105.65, 21.20, 106.05],

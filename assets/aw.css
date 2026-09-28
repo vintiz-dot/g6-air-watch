@@ -69,7 +69,7 @@ input.bad{border-color:var(--crimson)}
 .btn{border:0;border-radius:12px;padding:12px 18px;font-weight:700;font-size:16px;background:var(--ink);color:var(--card)}
 .btn.g{background:var(--green);color:#fff}
 .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--line)}
-.btn.sm{padding:8px 12px;font-size:14px;border-radius:10px}
+.btn.sm{padding:8px 12px;font-size:14px;border-radius:10px;line-height:1.2}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 a.btn{text-decoration:none;display:inline-block}
@@ -192,3 +192,34 @@ details.where summary{cursor:pointer;font-weight:600;margin-top:8px;color:var(--
 .flagrow small{display:block;color:var(--muted)}
 .flag{color:var(--crimson);font-weight:700;margin-left:3px;cursor:help}
 .ckc{white-space:nowrap}.ckc.bad{color:var(--crimson);font-weight:600}.ckc.good{color:var(--green)}
+/* first-time walkthrough, catch-up and sky photos (homework page) */
+.tutsteps{margin:4px 0 8px 20px;padding:0}
+.tutsteps li{margin:0 0 8px;padding-left:2px}
+.tutsteps .vn{display:block;font-size:13px}
+.linkbtn{border:0;background:none;padding:0;color:var(--teal);font-weight:600;text-decoration:underline;font-size:14px}
+.reccard{border:1px solid var(--line);border-radius:12px;padding:12px;background:#FFFFFF;color:#1F2A30;max-width:440px;margin:4px 0 6px}
+.reccard .rtop{display:flex;gap:12px;align-items:center}
+.reccard .rbig{flex:none;font-size:32px;font-weight:800;line-height:1;padding:10px 14px;border-radius:8px;min-width:64px;text-align:center}
+.reccard .rtop b{display:block}.reccard .rtop small{display:block;color:#5A6A72;font-size:13px}
+.reccard table{width:100%;margin-top:10px;border-collapse:collapse;font-size:15px}
+.reccard td{padding:4px 6px;border-bottom:1px solid #E5EBEE}
+.reccard td:first-child{color:#5A6A72;width:40%}
+.result.cu{background:var(--soft);color:var(--text);border-radius:12px;padding:12px 14px;margin:12px 0}
+.dchip .aq + i{font-size:11px}
+.note.cunote{border-color:var(--teal);background:var(--soft);color:var(--text)}
+.photobox{margin-top:6px}
+.phoneqr{display:grid;grid-template-columns:168px 1fr;gap:14px;align-items:center;border:1.5px dashed var(--teal);border-radius:12px;padding:12px;background:var(--soft)}
+.phoneqr .qr{background:#FFFFFF;border-radius:8px;padding:4px;line-height:0}
+.phoneqr .qr svg{width:160px;height:160px;display:block}
+.qrhow ol{margin:6px 0 6px 18px;padding:0;font-size:15px}.qrhow li{margin:0 0 4px}.qrhow .vn{margin:0;font-size:13px}
+.qrurl{font-size:12px;word-break:break-all;margin:8px 0 0}
+.filebtn{position:relative;overflow:hidden;display:inline-block;cursor:pointer;margin:0;line-height:1.2}
+.filebtn input[type=file]{position:absolute;left:0;top:0;width:1px;height:1px;opacity:0}
+.btn.big{font-size:18px;padding:16px 22px}
+.okline{color:var(--green);font-weight:600;margin:6px 0 0}
+.waitline{margin:8px 0 0;font-style:italic}
+.cambox{margin-top:10px}
+.cambox video{width:100%;max-width:480px;border-radius:10px;background:#000;display:block}
+.addph{border-top:1px dashed var(--line)}
+.phmode .thumb.big{max-width:100%;width:100%}
+@media (max-width:520px){.phoneqr{grid-template-columns:1fr}.phoneqr .qr{justify-self:center}}

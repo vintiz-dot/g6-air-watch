@@ -35,11 +35,11 @@
   }
 
   /* ───────── state ───────── */
-  const BLANK = { code: "", name: "", cls: "", area: "", slot: "", st: null, stPrev: [], days: {}, drafts: {}, thumbs: {}, refl: {}, q: null, sub: false, subAt: 0, created: 0, started: false };
+  const BLANK = { code: "", name: "", cls: "", area: "", slot: "", st: null, stPrev: [], days: {}, drafts: {}, thumbs: {}, refl: {}, q: null, sub: false, subAt: 0, created: 0, started: false, tut: false, cu: false, cuSkip: {} };
   const STARTERS = ["What would happen if…", "Why does… but not…?", "How could we know…?", "What if we measured…"];
   let S;
   try { S = Object.assign({}, BLANK, JSON.parse(localStorage.getItem(K) || "{}")); } catch (e) { S = Object.assign({}, BLANK); }
-  S.days = S.days || {}; S.drafts = S.drafts || {}; S.thumbs = S.thumbs || {}; S.refl = S.refl || {}; S.stPrev = S.stPrev || [];
+  S.days = S.days || {}; S.drafts = S.drafts || {}; S.thumbs = S.thumbs || {}; S.refl = S.refl || {}; S.stPrev = S.stPrev || []; S.cuSkip = S.cuSkip || {};
   if (!S.code) { S.code = makeCode(); S.created = Date.now(); }
   let CFG = {};
   let SEL = null;
@@ -95,6 +95,7 @@
       const x = sd[k]; if (!x || !x.a) return;
       const mine = S.days[k];
       if (!mine || (x.at || 0) > (mine.at || 0)) { S.days[k] = x; delete S.drafts[k]; got = true; }
+      else if (x.photo && !mine.photo && (x.at || 0) === (mine.at || 0)) { mine.photo = true; got = true; }
     });
     if (v.q && txt(v.q.t) && (!S.q || !txt(S.q.t) || (v.q.at || 0) > (S.q.at || 0))) { S.q = v.q; got = true; }
     if ((v.subAt || 0) > (S.subAt || 0)) { S.sub = !!v.sub; S.subAt = v.subAt; if (v.refl) S.refl = v.refl; got = true; }
@@ -148,8 +149,10 @@
         '<dl class="sum"><dt>Name</dt><dd>' + esc(S.name) + ' · ' + esc(S.cls) + '</dd>' +
         '<dt>My station</dt><dd>' + esc(S.st.name) + (S.st.url ? ' · <a href="' + esc(S.st.url) + '" target="_blank" rel="noopener">open</a>' : '') + '</dd>' +
         '<dt>My time</dt><dd>' + esc(slot ? slot.en : "") + ' — every day</dd>' +
-        (S.area ? '<dt>I live in</dt><dd>' + esc(S.area) + '</dd>' : '') + '</dl>';
+        (S.area ? '<dt>I live in</dt><dd>' + esc(S.area) + '</dd>' : '') + '</dl>' +
+        '<div class="btns" style="margin-top:6px"><button class="btn sm ghost" type="button" id="howBtn">How to find the numbers</button></div>';
       w.appendChild(c);
+      c.querySelector("#howBtn").onclick = () => { showTut = true; renderDay(); const d = $("#dayWrap"); if (d) d.scrollIntoView({ behavior: "smooth", block: "start" }); };
       return;
     }
     /* already started? find it again by name (or code) */
@@ -202,6 +205,7 @@
       const e = $("#setupErr");
       if (txt(S.name).length < 2) { e.textContent = "Type your name first."; nm.focus(); return; }
       if (!txt(S.cls)) { e.textContent = "Type your class."; cl.focus(); return; }
+      if (!/^[0-9A-Za-z.\-]{1,6}$/.test(txt(S.cls)) || !/\d/.test(S.cls)) { e.textContent = "Type your class like 6H1 — not your name. · Nhập lớp, ví dụ 6H1."; cl.focus(); return; }
       if (!S.slot) { e.textContent = "Choose your time."; return; }
       if (!S.st || !txt(S.st.name)) { e.textContent = "Choose your station."; return; }
       e.textContent = "";
@@ -267,6 +271,7 @@
       AWSYNC.copyPhotos(old.code, code, fromOld).then(() => quietSet("moved/" + old.code, code)).then(() => { quietSet("students/" + old.code, null); quietSet("roster/" + old.code, null); });
     }
     Object.keys(CHK).forEach(k => { delete CHK[k]; });
+    if (!savedCount() && missedDays().length) S.cu = true;
     push(); renderAll(); paintLive(true); watchBack();
     alertNote("Welcome back, " + (S.name || "") + " — your Air Watch is here." + (join ? " Your days from this device were added to it." : ""));
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -282,7 +287,7 @@
     $("#yesMine").onclick = () => loadCode(m.code, $("#dupErr"));
     $("#notMine").onclick = () => { box.innerHTML = ""; begin(); };
   }
-  function begin() { S.started = true; save(); push(); renderAll(); watchBack(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function begin() { S.started = true; if (!savedCount() && missedDays().length) S.cu = true; save(); push(); renderAll(); watchBack(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   function paintPicked() {
     const p = $("#stPicked"); if (!p) return;
@@ -361,6 +366,20 @@
     const L = $("#stList"); if (L) L.querySelectorAll(".st").forEach(x => { if (x.querySelector(".nm").firstChild.textContent === s.name) x.classList.add("on"); });
   }
 
+  /* ───────── catching up: a student who joins late first copies the missed days from the station's record ───────── */
+  const savedCount = () => Object.keys(S.days).filter(k => S.days[k]).length;
+  function missedDays() {
+    const t = todayIndex(), out = [];
+    for (let n = 1; n <= C.days && n < t; n++) if (!S.days[n] && !S.cuSkip[n]) out.push(n);
+    return out;
+  }
+  function cuActive() {
+    if (!S.cu) return false;
+    if (!missedDays().length) { S.cu = false; saveLocal(); return false; }
+    return true;
+  }
+  let showTut = false, lastCatch = null;
+
   /* ───────── week strip ───────── */
   function dayState(n) {
     const t = todayIndex();
@@ -372,31 +391,41 @@
   function renderWeek() {
     const w = $("#weekWrap"); w.innerHTML = "";
     if (!setupDone()) return;
-    const t = todayIndex();
+    const t = todayIndex(), cu = cuActive(), miss = cu ? missedDays() : [];
     if (SEL === null) {
       if (t >= 1 && t <= C.days) SEL = t;
       else if (t > C.days) SEL = C.days;
       else SEL = 1;
     }
+    /* catching up: the missed days come first, in order */
+    if (cu && !(miss.includes(SEL) || S.days[SEL])) SEL = miss[0];
     const g = el("div", "week");
     for (let n = 1; n <= C.days; n++) {
-      const st = dayState(n);
-      const b = el("button", "dchip" + (st === "today" ? " today" : "") + (st === "lock" ? " lock" : "") + (SEL === n ? " sel" : ""));
+      const st = dayState(n), wait = cu && st !== "done" && !miss.includes(n);
+      const b = el("button", "dchip" + (st === "today" ? " today" : "") + (st === "lock" || wait ? " lock" : "") + (SEL === n ? " sel" : ""));
       b.type = "button";
-      let tag = st === "done" ? "✓ saved" : st === "today" ? "today" : st === "missed" ? "catch up" : "later";
+      let tag = st === "done" ? "✓ saved" : st === "today" ? (cu ? "after catch-up" : "today") : st === "missed" ? (cu ? (miss.includes(n) ? "copy" : "no record") : "catch up") : "later";
       let aq = "";
       if (st === "done") {
-        const a = S.days[n].a && S.days[n].a.aqi; const c = CAT(a);
-        if (c) aq = '<span class="aq" style="background:' + c.col + ';color:' + c.ink + '">' + a + '</span>';
-        if (S.days[n].late) tag = "✓ late";
+        const r = S.days[n], a = r.a && r.a.aqi; const c = CAT(a);
+        if (c) aq = '<span class="aq" style="background:' + c.col + ';color:' + c.ink + '">' + a + '</span>' + (r.catchup ? '<i>copied</i>' : '');
+        if (r.late) tag = "✓ late";
       }
       b.innerHTML = "<b>Day " + n + "</b><i>" + esc(pretty(dateOfDay(n))) + "</i>" + (aq || "<i>" + tag + "</i>");
-      b.disabled = st === "lock";
+      b.disabled = st === "lock" || wait;
       b.onclick = () => { SEL = n; renderWeek(); renderDay(); };
       g.appendChild(b);
     }
     w.appendChild(g);
     if (t === 0) w.appendChild(el("div", "note", "Your week starts on " + esc(pretty(dateOfDay(1))) + "."));
+    if (cu) w.appendChild(el("div", "note cunote", '<b>Catch up first · Làm bù trước.</b> You joined after the week started, so ' +
+      (miss.length === 1 ? 'Day ' + miss[0] + ' is' : 'Days ' + miss.join(", ") + ' are') + ' missing. Copy ' + (miss.length === 1 ? 'it' : 'them') +
+      ' from your station\'s record — a few seconds each — and write the numbers in your book, page ' + esc(C.bookPage) + '. Then ' + (t >= 1 && t <= C.days ? 'do today.' : 'you are done.') +
+      '<br><span class="vn">Em tham gia muộn nên cần chép lại ' + miss.length + ' ngày còn thiếu từ số liệu của trạm, rồi mới làm hôm nay.</span>'));
+    else if (C.photoFrom && hanoiDate() >= C.photoFrom && t >= 1 && t <= C.days && !S.days[t])
+      w.appendChild(el("div", "note phnote", '<b>New from ' + esc(pretty(C.photoFrom)) + ': every day needs a photo of the sky.</b> It counts as much as your numbers — in class we compare what the sky looked like with what the station measured. ' +
+        'On a computer? The app shows a QR code: scan it with a phone camera, take the photo, and it appears on your computer.' +
+        '<br><span class="vn">Từ hôm nay, mỗi ngày cần một ảnh chụp bầu trời — quan trọng như các con số. Dùng máy tính? Quét mã QR bằng điện thoại để chụp và gửi ảnh.</span>'));
   }
 
   /* ───────── one day ───────── */
@@ -410,12 +439,169 @@
   function renderDay() {
     const w = $("#dayWrap"); w.innerHTML = "";
     if (!setupDone()) return;
+    /* the first time (and whenever the student asks): how to find the numbers */
+    if (showTut || (!S.tut && !savedCount())) { w.appendChild(tutCard()); return; }
     const n = SEL; if (!n || n < 1 || n > C.days) return;
-    const st = dayState(n);
+    const st = dayState(n), cu = cuActive();
     if (st === "lock") { w.appendChild(el("div", "note", "Day " + n + " opens on " + esc(pretty(dateOfDay(n))) + ".")); return; }
     if (S.days[n]) { const sc = summaryCard(n); w.appendChild(sc); allTimes(n, sc); return; }
+    if (cu && !missedDays().includes(n)) { w.appendChild(waitCard(n)); return; }
+    /* a missed day: copy the station's record (the default while catching up), or fill it in if the student did check that day */
+    const md = (S.drafts[n] || {}).mode;
+    if (st === "missed" && (md === "copy" || (cu && md !== "full"))) { w.appendChild(catchCard(n)); return; }
+    if (lastCatch && lastCatch.done) { lastCatch = null; w.appendChild(el("div", "ok", "<b>All caught up ✓</b> Now do today, Day " + n + ": look at the sky first, then check your station. · Em đã làm bù xong — bây giờ làm hôm nay.")); }
     /* the station numbers at all three times appear once the day is saved (not before: the student reads them from aqicn.org) */
     w.appendChild(formCard(n, st === "missed"));
+  }
+
+  /* ───────── first time: how to find the numbers ───────── */
+  function tutCard() {
+    const first = !S.tut, slot = slotOf(S.slot), url = S.st && S.st.url;
+    const c = el("div", "card tut");
+    c.innerHTML = '<div class="eyebrow">' + (first ? 'Before you start · Trước khi bắt đầu' : 'How to find the numbers · Cách tìm số liệu') + '</div>' +
+      '<h2 style="font-size:22px">How to find your numbers</h2>' +
+      '<p class="vn" style="margin:4px 0 10px">Every day at your time' + (slot ? ' (' + esc(slot.en) + ')' : '') + ' you do the same things. Mỗi ngày, vào giờ của em:</p>' +
+      '<ol class="tutsteps">' +
+      '<li><b>Look at the sky and guess first.</b> The app asks you before you open the station. <span class="vn">Nhìn bầu trời và đoán trước.</span></li>' +
+      '<li><b>Open your station.</b> Tap <i>Open my station</i> below. Check the name at the top is <b>' + esc(S.st.name) + '</b> — not another station. <span class="vn">Mở trang trạm của em và kiểm tra đúng tên trạm.</span></li>' +
+      '<li><b>AQI</b> = the big number in the coloured box at the top. Not the temperature, not the forecast. <span class="vn">AQI là số to trong ô màu ở trên cùng.</span></li>' +
+      '<li><b>PM2.5</b> = in the list under it, the PM2.5 row, the first number. <span class="vn">PM2.5 là số đầu tiên ở dòng PM2.5.</span></li>' +
+      '<li><b>Updated…</b> = the time under the station name: when the numbers were measured. <span class="vn">Giờ cập nhật ở dưới tên trạm.</span></li>' +
+      '<li><b>Take a photo of the sky.</b> It counts as much as your numbers: in class we compare what the sky looked like with what the station measured. ' +
+        '<b>On a computer?</b> The app shows a QR code — point your phone camera at it, take the photo, tap <i>Send</i>, and it appears on your computer. <span class="vn">Chụp ảnh bầu trời — quan trọng như các con số. Dùng máy tính thì quét mã QR bằng điện thoại.</span></li>' +
+      '</ol>' +
+      (url ? '<div class="btns" style="margin-top:4px"><a class="btn sm" href="' + esc(url) + '" target="_blank" rel="noopener">Open my station</a></div>' : '') +
+      whereHTML(S.st.name, true) +
+      '<div class="btns"><button class="btn g" type="button" id="tutOk">' + (first ? 'I know where to look — start' : 'Close') + '</button></div>';
+    c.querySelector("#tutOk").onclick = () => {
+      S.tut = true; showTut = false; save(); renderWeek(); renderDay();
+      const w = $("#weekWrap"); if (w) w.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    return c;
+  }
+  /* today (or a day with no record) waits until the missed days are copied */
+  function waitCard(n) {
+    const miss = missedDays();
+    const c = el("div", "card");
+    c.innerHTML = '<div class="eyebrow">Day ' + n + ' · ' + esc(pretty(dateOfDay(n))) + '</div><h2 style="font-size:22px">Catch up first</h2>' +
+      '<p>Copy your ' + miss.length + ' missed ' + (miss.length === 1 ? 'day' : 'days') + ' from your station\'s record first — a few seconds each. Then this day opens. <span class="vn">Em làm bù các ngày còn thiếu trước.</span></p>' +
+      '<div class="btns"><button class="btn g" type="button">Go to Day ' + miss[0] + '</button></div>';
+    c.querySelector("button").onclick = () => { SEL = miss[0]; renderWeek(); renderDay(); };
+    return c;
+  }
+
+  /* ───────── a missed day: copy what the station recorded at the student's time ───────── */
+  const hmText = m => String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+  const numOrNull = v => v === null || v === undefined || v === "" || !isFinite(+v) ? null : +v;
+  /* the station's own record for the window → the reading saved nearest the window → a classmate's checked reading → the estimate */
+  function loadRecord(uid, date, slotK, ll) {
+    const sl = window.AWST && AWST.slotOf(slotK);
+    if (uid == null || !sl) return Promise.resolve(null);
+    const k = "s" + uid, on = window.AWSYNC && AWSYNC.available();
+    const get = p => on ? AWSYNC.getPath(p).catch(() => null) : Promise.resolve(null);
+    return Promise.all([get("stationLog/" + k + "/" + date + "/" + slotK), get("stationHist/" + k + "/" + date), get("stationEst/" + k + "/" + date + "/" + slotK)]).then(([L, H, E]) => {
+      if (L && numOrNull(L.aqi) != null && L.src !== "class") {
+        const t = L.t && isFinite(Date.parse(L.t)) ? AWST.hanoi(Date.parse(L.t)) : null;
+        return { aqi: numOrNull(L.aqi), pm25: numOrNull(L.pm25), dom: L.dom || null, hm: t && t.date === date ? hmText(t.min) : "", src: "record" };
+      }
+      const mid = (sl.from + sl.to) / 2; let best = null;
+      Object.keys(H || {}).forEach(t => {
+        const m = AWST.histMin(t), x = H[t];
+        if (m == null || !x || numOrNull(x.aqi) == null) return;
+        const dd = Math.abs(m - mid);
+        if (dd <= 90 && (!best || dd < best.dd)) best = { dd, m, x };
+      });
+      if (best) return { aqi: numOrNull(best.x.aqi), pm25: numOrNull(best.x.pm25), dom: null, hm: hmText(best.m), src: "record" };
+      if (L && numOrNull(L.aqi) != null) return { aqi: numOrNull(L.aqi), pm25: numOrNull(L.pm25), dom: null, hm: "", src: "class" };
+      if (E && numOrNull(E.aqi) != null) return { aqi: numOrNull(E.aqi), pm25: numOrNull(E.pm25), dom: null, hm: "", src: "est" };
+      const where = ll && ll.lat != null ? Promise.resolve(ll) : get("stationMeta/" + k);
+      return where.then(m => m && m.lat != null ? Promise.race([AWST.estimateAt({ fetch: fetchFn, lat: m.lat, lon: m.lon, date, slot: slotK }), new Promise(r => setTimeout(() => r(null), 9000))]) : null)
+        .then(e => e && numOrNull(e.aqi) != null ? { aqi: numOrNull(e.aqi), pm25: numOrNull(e.pm25), dom: null, hm: "", src: "est" } : null)
+        .catch(() => null);
+    });
+  }
+  const srcText = R => R.src === "est" ? "Estimate from a computer model — no reading of this station was saved at your time that day"
+    : R.src === "class" ? "A classmate's checked reading of this station at your time" : "Station record" + (R.hm ? " · updated " + R.hm : "");
+  function recHTML(R, name) {
+    const c = CAT(R.aqi) || { col: "#ccc", ink: "#000", en: "" };
+    return '<div class="reccard"><div class="rtop"><span class="rbig" style="background:' + c.col + ';color:' + c.ink + '">' + R.aqi + '</span>' +
+      '<div><b>' + esc(name) + '</b><small>' + esc(c.en) + '</small><small>' + esc(srcText(R)) + '</small></div></div>' +
+      '<table><tr><td>AQI</td><td><b>' + R.aqi + '</b></td></tr><tr><td>PM2.5</td><td><b>' + (R.pm25 == null ? '– (not shown)' : R.pm25) + '</b></td></tr></table></div>';
+  }
+  function catchCard(n) {
+    const d = draftOf(n), date = dateOfDay(n), cu = cuActive(), slot = slotOf(S.slot), cs = CFG.classStation;
+    const ownUid = S.st && S.st.uid != null && !S.st.custom ? String(S.st.uid) : null;
+    const clsUid = cs && cs.uid != null ? String(cs.uid) : null, same = clsUid != null && clsUid === ownUid;
+    const left = cu ? missedDays().length : 0;
+    const card = el("div", "card");
+    const just = lastCatch; lastCatch = null;
+    card.innerHTML = (just ? '<div class="ok" style="margin-top:0">Day ' + just.n + ' saved ✓ ' + (just.pm25 != null ? '— in your book: PM2.5 = ' + just.pm25 : '— in your book: AQI = ' + just.aqi) + '</div>' : '') +
+      '<div class="eyebrow">Day ' + n + ' · ' + esc(pretty(date)) + ' · catch-up' + (cu ? ' · ' + left + ' to copy' : '') + '</div>' +
+      '<h2 style="font-size:22px">Copy your station\'s record</h2>' +
+      '<p class="vn" style="margin:4px 0 8px">You did not check on this day, so copy what <b>' + esc(S.st.name) + '</b> recorded at your time' + (slot ? ' (' + esc(slot.en) + ')' : '') +
+      '. Type the numbers here, then write them in your book, page ' + esc(C.bookPage) + ', Day ' + n + '. This day will show as <b>catch-up</b> (no guess, no photo). · Em chép số liệu trạm đã ghi vào giờ của em, rồi viết vào sách.</p>' +
+      '<div id="rec"><p class="vn">Loading the record…</p></div>' +
+      '<p class="vn" style="margin-top:12px"><button class="linkbtn" type="button" id="didCheck">I did check on this day and wrote my numbers down</button></p>';
+    card.querySelector("#didCheck").onclick = () => { d.mode = "full"; save(); renderDay(); };
+    const box = card.querySelector("#rec");
+    const ll = S.st && S.st.lat != null ? { lat: S.st.lat, lon: S.st.lon } : null;
+    Promise.all([loadRecord(ownUid, date, S.slot, ll), clsUid && !same ? loadRecord(clsUid, date, S.slot, null) : Promise.resolve(null)]).then(([R, RC]) => {
+      if (!card.isConnected) return;
+      if (!R) {
+        box.innerHTML = '<div class="note">There is no record for ' + esc(S.st.name) + ' on this day at your time, and the estimate did not load. ' +
+          (ownUid == null ? 'Your station was typed by hand, so the app cannot look it up. ' : '') + 'You can try again, or skip this day — it stays empty, and that is OK. · Không có số liệu cho ngày này.</div>' +
+          '<div class="btns"><button class="btn ghost" type="button" id="cuRetry">Try again</button><button class="btn" type="button" id="cuSkip">Skip Day ' + n + '</button></div>';
+        box.querySelector("#cuRetry").onclick = () => renderDay();
+        box.querySelector("#cuSkip").onclick = () => { S.cuSkip[n] = true; delete S.drafts[n]; saveLocal(); afterCatch(); };
+        return;
+      }
+      box.innerHTML = recHTML(R, S.st.name) +
+        '<div class="row2"><div><label for="caqi">AQI — copy it</label><input id="caqi" type="number" inputmode="numeric" min="0" max="999"></div>' +
+        (R.pm25 != null ? '<div><label for="cpm">PM2.5 — copy it</label><input id="cpm" type="number" inputmode="numeric" min="0" max="999"></div>' : '<div class="vn" style="align-self:end">PM2.5 is not shown for this station, so there is nothing to copy.</div>') + '</div>' +
+        (clsUid && !same ? '<p class="vn" style="margin:8px 0 0">Class station (' + esc(cs.name || "") + '): ' + (RC ? 'AQI ' + RC.aqi + (RC.src === "est" ? ' (estimate)' : '') + ' — saved for you, nothing to type.' : 'no record for this day.') + '</p>' : '') +
+        '<div class="book">In your book, page ' + esc(C.bookPage) + ', Day ' + n + ': <b>' + (R.pm25 != null ? 'PM2.5 = ' + R.pm25 : 'AQI = ' + R.aqi) + '</b>' + (R.src === "est" ? ' (write “≈” before it — it is an estimate)' : '') + '. Viết vào sách trang ' + esc(C.bookPage) + '.</div>' +
+        '<div class="err" id="cuErr"></div><div class="btns"><button class="btn g" type="button" id="cuSave">Save catch-up Day ' + n + '</button></div>';
+      const ia = box.querySelector("#caqi"), ip = box.querySelector("#cpm"), er = box.querySelector("#cuErr");
+      ia.value = d.caqi ?? ""; if (ip) ip.value = d.cpm ?? "";
+      ia.oninput = () => { d.caqi = ia.value; save(); };
+      if (ip) ip.oninput = () => { d.cpm = ip.value; save(); };
+      box.querySelector("#cuSave").onclick = () => {
+        [ia, ip].forEach(i => { if (i) i.classList.remove("bad"); });
+        if (int(ia.value) !== R.aqi) { ia.classList.add("bad"); ia.focus(); er.textContent = "Copy the AQI exactly as the record shows it: " + R.aqi + "."; return; }
+        if (ip && int(ip.value) !== R.pm25) { ip.classList.add("bad"); ip.focus(); er.textContent = "Copy the PM2.5 exactly as the record shows it: " + R.pm25 + "."; return; }
+        er.textContent = "";
+        const now = Date.now(), by = R.src === "est" ? "est" : "record";
+        const rec = {
+          date, at: now, late: true, catchup: true,
+          a: { aqi: R.aqi, pm25: R.pm25, pm25na: R.pm25 == null, big: R.dom && PARTS.some(p => p.k === R.dom) ? R.dom : "notshown", upd: R.hm || "", st: S.st.uid, src: R.src },
+          what: [], note: "", photo: !!d.hadPhoto,
+          chk: { aqi: { ok: true, by, r: R.aqi }, pm25: R.pm25 == null ? null : { ok: true, by, r: R.pm25 }, raqi: RC ? { ok: true, by: RC.src === "est" ? "est" : "record", r: RC.aqi } : null, at: now }
+        };
+        /* a guess made on that day (a day the teacher sent back) still counts */
+        if (d.gAt && d.guess && hanoiDate(new Date(d.gAt)) === date) rec.g = { sky: d.sky || null, guess: d.guess, at: d.gAt };
+        if (same) rec.ref = { aqi: R.aqi, pm25: R.pm25, uid: cs.uid, same: true };
+        else if (clsUid) rec.ref = RC ? { aqi: RC.aqi, pm25: RC.pm25, uid: cs.uid } : { aqi: null, pm25: null, uid: cs.uid, nodata: true };
+        S.days[n] = rec; delete S.drafts[n]; delete S.cuSkip[n];
+        lastCatch = { n, aqi: R.aqi, pm25: R.pm25 };
+        saveLocal(); push();
+        afterCatch();
+      };
+    });
+    return card;
+  }
+  /* after a catch-up day: the next missed day, or today once they are all done */
+  function afterCatch() {
+    if (S.cu) {
+      const miss = missedDays();
+      if (miss.length) SEL = miss[0];
+      else {
+        S.cu = false; saveLocal(); lastCatch = null;
+        const t = todayIndex();
+        if (t >= 1 && t <= C.days && !S.days[t]) { SEL = t; lastCatch = { done: true }; }
+      }
+    } else lastCatch = null;
+    renderWeek(); renderDay(); renderExtra();
+    const w = $("#weekWrap"); if (w) w.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function catChip(c, on) {
@@ -434,8 +620,11 @@
       (d.back ? '<div class="note back"><b>Your teacher sent this day back:</b> the numbers did not match your station. ' +
           (past ? 'If you wrote the real numbers down on that day, type them again. If you did not, leave this day empty — that is OK. · Nếu em đã ghi lại số thật của hôm đó, hãy nhập lại. Nếu không, hãy để trống ngày này.'
             : 'Look at your station again and type exactly what it shows. · Hãy xem lại trạm của em và nhập đúng số.') + '</div>'
-        : late ? '<div class="note">Catching up. That is fine — this day will show as <b>entered late</b>, so be honest: only fill it in if you checked on that day (for example, you wrote it in your book). Your numbers are checked against what your station recorded that day.</div>' : '');
+        : late ? '<div class="note">Catching up. That is fine — this day will show as <b>entered late</b>, so be honest: only fill it in if you checked on that day (for example, you wrote it in your book). Your numbers are checked against what your station recorded that day.</div>' : '') +
+      (late ? '<div class="btns" style="margin-top:0"><button class="btn sm" type="button" id="toCopy">I did not check that day — copy the station\'s record</button></div>' : '');
     card.appendChild(head);
+    const toCopy = head.querySelector("#toCopy");
+    if (toCopy) toCopy.onclick = () => { d.mode = "copy"; save(); renderDay(); };
 
     /* step 1 */
     const s1 = el("div", "step");
@@ -555,21 +744,14 @@
     const note = s4.querySelector("#note"); note.value = d.note || "";
     note.oninput = () => { d.note = note.value; save(); };
 
-    /* step 5 — photo */
+    /* step 5 — photo (needed from C.photoFrom on: it counts as much as the numbers) */
+    const needPh = needPhoto(n);
     const s5 = el("div", "step");
-    s5.innerHTML = '<h3><span class="num">' + (k4 + 1) + '</span>Photo of the sky (optional)</h3>' +
-      '<p class="how">Sky only — no people, no house numbers. Chỉ chụp bầu trời.</p>' +
-      '<input type="file" id="ph" accept="image/*" capture="environment"><div id="phPrev"></div>';
+    s5.innerHTML = '<h3><span class="num">' + (k4 + 1) + '</span>' + (needPh ? 'Photo of the sky — as important as your numbers' : 'Photo of the sky (optional)') + '</h3>' +
+      '<p class="how">' + (needPh ? 'Your day is saved only with a photo: in class we compare what the sky looked like with what the station measured. ' : '') +
+      'Sky only — no people, no house numbers. Chỉ chụp bầu trời' + (needPh ? ' — ảnh quan trọng như các con số.' : '.') + '</p>';
+    s5.appendChild(photoBox(n));
     card.appendChild(s5);
-    const ph = s5.querySelector("#ph"), prev = s5.querySelector("#phPrev");
-    if (d.photo) prev.innerHTML = '<img class="thumb" alt="Your sky photo" src="' + d.photo + '">';
-    else if (d.hadPhoto) prev.innerHTML = '<p class="vn">Your photo for this day is already sent ✓ — add a new one only if you want to change it.</p>';
-    ph.onchange = () => {
-      const f = ph.files && ph.files[0]; if (!f) return;
-      prev.textContent = "Getting your photo ready…";
-      compress(f, 900, 0.62).then(u => { d.photo = u; save(); prev.innerHTML = '<img class="thumb" alt="Your sky photo" src="' + u + '">'; })
-        .catch(() => { prev.textContent = "That photo did not work. Try another one, or skip it."; });
-    };
 
     /* ── checking the numbers: with the station, as soon as they are typed ── */
     const ownUid = S.st && S.st.uid != null && !S.st.custom ? String(S.st.uid) : null;
@@ -683,6 +865,10 @@
         rP = int(d.rpm25);
       }
       if (!d.what.length) return bad(null, "Tick at least one thing (or “Nothing special”).", s4.querySelector("#e4"));
+      if (needPh && !d.photo && !d.hadPhoto) {
+        eS.textContent = "Add your photo of the sky first (step " + (k4 + 1) + ") — it counts as much as your numbers. · Hãy thêm ảnh bầu trời.";
+        s5.scrollIntoView({ behavior: "smooth", block: "center" }); return false;
+      }
 
       /* the numbers must match the station before the day is saved */
       sb.disabled = true; sb.textContent = "Checking with the station…";
@@ -797,8 +983,8 @@
       '<li>Type exactly what you see now — the numbers change during the day. <span class="vn">Gõ đúng số em thấy bây giờ.</span></li></ol>' +
       (url ? '<a class="btn sm" href="' + esc(url) + '" target="_blank" rel="noopener">' + open + '</a>' : '') + whereHTML(nm);
   }
-  function whereHTML(nm) {
-    return '<details class="where"><summary>Show me where to look</summary><div class="aqmock" role="img" aria-label="Example of a station page on aqicn.org: the AQI is the big number at the top, PM2.5 is the first number in the PM2.5 row">' +
+  function whereHTML(nm, open) {
+    return '<details class="where"' + (open ? ' open' : '') + '><summary>Show me where to look</summary><div class="aqmock" role="img" aria-label="Example of a station page on aqicn.org: the AQI is the big number at the top, PM2.5 is the first number in the PM2.5 row">' +
       '<div class="mtop"><span class="mbig">87</span><div><b>' + esc(nm) + '</b><small>Moderate</small><small>Updated on Saturday 19:00</small></div></div>' +
       '<table><tr><th></th><th>current</th><th>min</th><th>max</th></tr>' +
       '<tr class="hi"><td>PM2.5</td><td><b>87</b></td><td>55</td><td>152</td></tr><tr><td>PM10</td><td>41</td><td>20</td><td>66</td></tr><tr class="no"><td>Temp.</td><td>29</td><td>26</td><td>34</td></tr></table>' +
@@ -854,22 +1040,32 @@
   function summaryCard(n) {
     const r = S.days[n];
     const card = el("div", "card");
-    const real = CAT(r.a.aqi), guess = CATS.find(c => c.k === r.g.guess);
+    const g = r.g || {}, real = CAT(r.a.aqi), guess = CATS.find(c => c.k === g.guess);
     const right = real && guess && real.k === guess.k;
-    const skyTxt = (SKY.find(s => s[0] === r.g.sky) || [0, "?"])[1];
-    card.innerHTML = '<div class="eyebrow">Day ' + n + ' · ' + esc(pretty(r.date)) + (r.late ? ' · <span class="late">entered late</span>' : '') + '</div>' +
-      '<div id="result" class="result ' + (right ? "ok" : "no") + '">' +
-      (right ? '<b>Your eyes were right today.</b><br>' : '<b>Looking was not enough today.</b><br>') +
-      'The sky looked <b>' + esc(skyTxt.toLowerCase()) + '</b>. You guessed <b>' + esc(guess ? guess.en : "?") + '</b>. Your station said <b>' + r.a.aqi + '</b> — ' + esc(real ? real.en : "?") + '.</div>' +
+    const skyTxt = (SKY.find(s => s[0] === g.sky) || [0, "?"])[1];
+    const what = r.what || [], pm = r.a.pm25 !== null && r.a.pm25 !== undefined;
+    const src = r.a.src === "est" ? "the estimate for your time (no station reading was saved)" : r.a.src === "class" ? "a classmate's checked reading" : "your station's record";
+    card.innerHTML = '<div class="eyebrow">Day ' + n + ' · ' + esc(pretty(r.date)) + (r.catchup ? ' · <span class="late">catch-up</span>' : r.late ? ' · <span class="late">entered late</span>' : '') + '</div>' +
+      (guess ? '<div id="result" class="result ' + (right ? "ok" : "no") + '">' +
+        (right ? '<b>Your eyes were right' + (r.catchup ? '' : ' today') + '.</b><br>' : '<b>Looking was not enough' + (r.catchup ? '' : ' today') + '.</b><br>') +
+        'The sky looked <b>' + esc(skyTxt.toLowerCase()) + '</b>. You guessed <b>' + esc(guess.en) + '</b>. Your station said <b>' + r.a.aqi + '</b> — ' + esc(real ? real.en : "?") + '.</div>'
+        : '<div id="result" class="result cu"><b>Catch-up day.</b><br>You copied ' + esc(src) + ': AQI <b>' + r.a.aqi + '</b> — ' + esc(real ? real.en : "?") + '. There is no guess for this day, so it is not counted in “Can you tell by looking?”.</div>') +
       '<dl class="sum">' +
-      '<dt>My station</dt><dd>AQI ' + r.a.aqi + (r.a.pm25 !== null ? ' · PM2.5 ' + r.a.pm25 : ' · PM2.5 not shown') + ' · biggest: ' + esc(partName(r.a.big)) + (r.a.upd ? ' · updated ' + esc(r.a.upd) : '') + '</dd>' +
-      (r.ref ? '<dt>Class station</dt><dd>AQI ' + r.ref.aqi + (r.ref.pm25 !== null && r.ref.pm25 !== undefined ? ' · PM2.5 ' + r.ref.pm25 : '') + '</dd>' : '') +
-      (r.six ? '<dt>Six parts</dt><dd>' + PARTS.map(p => esc(p.en) + ' ' + (r.six[p.k] === null ? '–' : r.six[p.k])).join(' · ') + '</dd>' : '') +
-      '<dt>Happening</dt><dd>' + esc(r.what.map(k => (WHAT.find(w => w[0] === k) || [0, k])[1]).join(", ")) + (r.note ? ' — ' + esc(r.note) : '') + '</dd>' +
+      '<dt>My station</dt><dd>AQI ' + r.a.aqi + (pm ? ' · PM2.5 ' + r.a.pm25 : ' · PM2.5 not shown') + (r.catchup ? '' : ' · biggest: ' + esc(partName(r.a.big))) + (r.a.upd ? ' · updated ' + esc(r.a.upd) : '') + '</dd>' +
+      (r.ref ? '<dt>Class station</dt><dd>' + (r.ref.nodata || r.ref.aqi == null ? 'no data' : 'AQI ' + r.ref.aqi + (r.ref.pm25 !== null && r.ref.pm25 !== undefined ? ' · PM2.5 ' + r.ref.pm25 : '')) + '</dd>' : '') +
+      (r.six ? '<dt>Six parts</dt><dd>' + PARTS.map(p => esc(p.en) + ' ' + (r.six[p.k] === null || r.six[p.k] === undefined ? '–' : r.six[p.k])).join(' · ') + '</dd>' : '') +
+      (what.length || r.note ? '<dt>Happening</dt><dd>' + esc(what.map(k => (WHAT.find(w => w[0] === k) || [0, k])[1]).join(", ")) + (r.note ? ' — ' + esc(r.note) : '') + '</dd>' : '') +
       '</dl>' +
       (S.thumbs[n] ? '<img class="thumb" alt="Your sky photo" src="' + S.thumbs[n] + '">' : (r.photo ? '<div class="phslot"><p class="vn">Loading your photo…</p></div>' : '')) +
-      '<div class="book">Now write it in your book, page ' + esc(C.bookPage) + ', Day ' + n + ': <b>' + (r.a.pm25 !== null ? 'PM2.5 = ' + r.a.pm25 : 'AQI = ' + r.a.aqi) + '</b>. Viết vào sách trang ' + esc(C.bookPage) + '.</div>';
+      '<div class="book">' + (r.catchup ? 'Write it' : 'Now write it') + ' in your book, page ' + esc(C.bookPage) + ', Day ' + n + ': <b>' + (pm ? 'PM2.5 = ' + r.a.pm25 : 'AQI = ' + r.a.aqi) + '</b>' + (r.a.src === "est" ? ' (≈, an estimate)' : '') + '. Viết vào sách trang ' + esc(C.bookPage) + '.</div>';
     if (r.photo && !S.thumbs[n]) loadThumb(n, card);
+    /* a day saved without its photo (on another device, or before the update reached it): add the photo here */
+    if (!r.photo && !r.catchup && needPhoto(n)) {
+      const add = el("div", "step addph");
+      add.innerHTML = '<h3>Add your sky photo</h3><p class="how">This day has no photo yet. The photo counts as much as your numbers. · Ngày này chưa có ảnh bầu trời.</p>';
+      add.appendChild(photoBox(n));
+      card.appendChild(add);
+    }
     const nx = nextOpenDay();
     if (nx) {
       const b = el("div", "btns"); const bb = el("button", "btn ghost", nx.label); bb.type = "button";
@@ -975,15 +1171,18 @@
       w.appendChild(el("p", "vn", "Days saved: " + done.length + " of " + C.days + ". On Day " + C.days + " you will also look back at your whole week."));
       return;
     }
-    const right = done.filter(n => { const r = S.days[n]; const c = CAT(r.a.aqi); return c && r.g.guess === c.k; }).length;
+    /* catch-up days have no guess: they count for the numbers, not for "can you tell by looking?" */
+    const looked = done.filter(n => S.days[n].g && S.days[n].g.guess);
+    const right = looked.filter(n => { const r = S.days[n]; const c = CAT(r.a.aqi); return c && r.g.guess === c.k; }).length;
     let worst = null;
     done.forEach(n => { if (!worst || S.days[n].a.aqi > S.days[worst].a.aqi) worst = n; });
     const card = el("div", "card");
-    const wr = worst ? S.days[worst] : null;
+    const wr = worst ? S.days[worst] : null, wWhat = wr ? (wr.what || []) : [];
     card.innerHTML = '<div class="eyebrow">Look back at your week · Nhìn lại cả tuần</div>' +
       '<h2 style="font-size:22px">What did your week show?</h2>' +
-      '<div class="ok" style="background:var(--soft);color:var(--text)">Your guesses were right on <b>' + right + ' of ' + done.length + '</b> ' + (done.length === 1 ? 'day' : 'days') + '.' +
-      (wr ? '<br>Your worst day was <b>Day ' + worst + '</b> (' + esc(pretty(wr.date)) + '): AQI <b>' + wr.a.aqi + '</b>. You noted: ' + esc(wr.what.map(k => (WHAT.find(x => x[0] === k) || [0, k])[1]).join(", ")) + '.' : '') + '</div>' +
+      '<div class="ok" style="background:var(--soft);color:var(--text)">' + (looked.length ? 'Your guesses were right on <b>' + right + ' of ' + looked.length + '</b> ' + (looked.length === 1 ? 'day' : 'days') + ' you looked.' : 'You have no days with a guess yet.') +
+      (done.length > looked.length ? ' (' + (done.length - looked.length) + ' catch-up ' + (done.length - looked.length === 1 ? 'day has' : 'days have') + ' no guess.)' : '') +
+      (wr ? '<br>Your worst day was <b>Day ' + worst + '</b> (' + esc(pretty(wr.date)) + '): AQI <b>' + wr.a.aqi + '</b>.' + (wWhat.length ? ' You noted: ' + esc(wWhat.map(k => (WHAT.find(x => x[0] === k) || [0, k])[1]).join(", ")) + '.' : '') : '') + '</div>' +
       '<label for="rf1">Why do you think Day ' + (worst || "?") + ' was the worst? · Vì sao?</label><input id="rf1" maxlength="200" placeholder="I think it was the worst because…">' +
       '<label for="rf2">What do your guesses tell you about looking at the sky?</label><input id="rf2" maxlength="200" placeholder="Looking at the sky… because…">' +
       '<p class="vn" style="margin-top:8px">Check <b>My question</b> above too — is it the question you want to ask on ' + esc(C.lessonLabel.split(",")[0]) + '?</p>' +
@@ -997,12 +1196,176 @@
     r2.oninput = () => { S.refl.look = r2.value; save(true); };
     card.querySelector("#hand").onclick = () => {
       if (txt(S.refl.why).length < 8 || txt(S.refl.look).length < 8) { card.querySelector("#eR").textContent = "Write both sentences first."; return; }
-      S.refl.right = right; S.refl.of = done.length; S.refl.worst = worst;
+      S.refl.right = right; S.refl.of = looked.length; S.refl.worst = worst;
       S.sub = true; S.subAt = Date.now(); save(); push().then(() => renderExtra());
     };
   }
 
-  /* ───────── photos ───────── */
+  /* ───────── photos ─────────
+     A phone takes the photo here. On a computer the student scans a QR code with a phone: the phone opens
+     this page in "photo mode" (…homework.html?code=ABC123&photo=6), takes the photo and sends it; the
+     computer sees it arrive (it watches photos/CODE_day/at) and shows it. The photo is sent as soon as it
+     is taken, so it is kept even if the day is saved later or on another device. */
+  const needPhoto = n => !!C.photoFrom && dateOfDay(n) >= C.photoFrom;
+  function isTouch() {
+    try {
+      const ua = navigator.userAgent || "";
+      if (/Android|iPhone|iPad|iPod|Mobile|Silk|Kindle/i.test(ua)) return true;
+      if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return true;   /* an iPad asking for the desktop site */
+      return !!(window.matchMedia && matchMedia("(pointer: coarse)").matches && matchMedia("(hover: none)").matches);
+    } catch (e) { return false; }
+  }
+  const pageBase = () => location.href.split("#")[0].split("?")[0];
+  function photoLink(n, code) { return pageBase() + "?code=" + (code || S.code) + "&photo=" + n; }
+  function qrSVG(text) {
+    if (typeof qrcode !== "function") return "";
+    try {
+      const q = qrcode(0, "M"); q.addData(text); q.make();
+      return q.createSvgTag({ cellSize: 4, margin: 16, scalable: true })
+        .replace(/<description[^>]*>[\s\S]*?<\/description>/, "").replace(/aria-labelledby="[^"]*"/, 'aria-label="QR code that opens the photo page on a phone"');
+    } catch (e) { return ""; }
+  }
+  const PHOTO = {};     /* day → the full photo shown on this page */
+  const PHW = {};       /* "CODE_day" → one watcher each */
+  /* send a photo for day n now; mark the day (or the day being filled in) as having one */
+  function sendPhoto(n, u) {
+    PHOTO[n] = u;
+    makeThumb(u).then(t => { S.thumbs[n] = t; saveLocal(); }).catch(() => {});
+    if (!window.AWSYNC || !AWSYNC.available()) return Promise.resolve(false);
+    const key = S.code + "_" + n, w = PHW[key] = PHW[key] || {};
+    w.mine = Date.now();
+    return AWSYNC.savePhoto(S.code, n, u).then(ok => {
+      if (!ok) return false;
+      if (S.days[n]) { if (!S.days[n].photo) { S.days[n].photo = true; saveLocal(); push(); } }
+      else { const d = draftOf(n); d.hadPhoto = true; delete d.photo; saveLocal(); }
+      return true;
+    });
+  }
+  /* a photo sent from the phone (or another device) for day n */
+  function watchPhoto(n, cb) {
+    const key = S.code + "_" + n, code = S.code;
+    const w = PHW[key] = PHW[key] || {};
+    w.cb = cb;
+    if (w.on || !window.AWSYNC || !AWSYNC.available()) return;
+    w.on = true;
+    AWSYNC.watchPath("photos/" + key + "/at", at => {
+      if (!at || at === w.at || code !== S.code) return;
+      const first = w.at === undefined; w.at = at;
+      if (w.mine && Math.abs(at - w.mine) < 15000) return;          /* our own upload */
+      AWSYNC.getPhoto(code, n).then(p => {
+        if (!p || !p.d || code !== S.code) return;
+        PHOTO[n] = p.d;
+        if (S.days[n]) { if (!S.days[n].photo) { S.days[n].photo = true; saveLocal(); push(); } }
+        else { const d = draftOf(n); d.hadPhoto = true; delete d.photo; saveLocal(); }
+        const fin = () => { if (w.cb) w.cb(!first); };
+        makeThumb(p.d).then(t => { S.thumbs[n] = t; saveLocal(); fin(); }).catch(fin);
+      });
+    });
+  }
+  /* the photo step: a QR code on a computer, the camera on a phone */
+  function photoBox(n) {
+    const touch = isTouch(), box = el("div", "photobox" + (touch ? " touch" : ""));
+    const has = () => S.days[n] ? !!S.days[n].photo : !!(S.drafts[n] && (S.drafts[n].photo || S.drafts[n].hadPhoto));
+    const cam = !touch && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    box.innerHTML = (touch
+      ? '<div class="btns" style="margin-top:0"><label class="btn g filebtn">Take the photo<input type="file" id="ph" accept="image/*" capture="environment"></label>' +
+        '<label class="btn ghost filebtn">Choose a photo I took<input type="file" id="ph2" accept="image/*"></label></div>'
+      : '<div class="phoneqr"><div class="qr">' + qrSVG(photoLink(n)) + '</div><div class="qrhow"><b>Take it with your phone</b><ol>' +
+        '<li>Open the <b>camera</b> on your phone and point it at this square.</li>' +
+        '<li>Tap the link that appears. Take the photo of the sky, then tap <b>Send to my computer</b>.</li>' +
+        '<li>Wait here — your photo appears below by itself.</li></ol>' +
+        '<p class="vn">Mở camera điện thoại, quét mã, chụp bầu trời rồi bấm “Send”. Ảnh sẽ tự hiện ở đây.</p></div></div>' +
+        '<div class="btns"><label class="btn sm ghost filebtn">Choose a photo on this computer<input type="file" id="ph" accept="image/*"></label>' +
+        (cam ? '<button class="btn sm ghost" type="button" id="camBtn">No phone? Use this computer\'s camera</button>' : '') + '</div>' +
+        '<p class="vn qrurl">The camera cannot read the square? On the phone, type: <b>' + esc(photoLink(n).replace(/^https?:\/\//, "")) + '</b></p>') +
+      '<div id="camBox"></div><div id="phPrev"></div>';
+    const prev = box.querySelector("#phPrev");
+    function paint(msg) {
+      if (!box.isConnected && msg !== "init") return;
+      const src = PHOTO[n] || (S.drafts[n] && S.drafts[n].photo) || null;
+      if (src) prev.innerHTML = '<img class="thumb" alt="Your sky photo" src="' + src + '"><p class="okline">' + (has() ? 'Photo added ✓ — you can take a new one to change it.' : 'Photo ready — it is sent when you save.') + '</p>';
+      else if (has()) {
+        prev.innerHTML = '<p class="okline">Photo added ✓ <span class="vn">(loading it…)</span></p>';
+        if (window.AWSYNC && AWSYNC.available()) AWSYNC.getPhoto(S.code, n).then(p => { if (p && p.d) { PHOTO[n] = p.d; paint(); } });
+      }
+      else prev.innerHTML = touch ? '' : '<p class="vn waitline">Waiting for a photo from your phone…</p>';
+    }
+    function pick(f) {
+      if (!f) return;
+      prev.innerHTML = '<p class="vn">Getting your photo ready…</p>';
+      compress(f, 900, 0.62).then(u => {
+        if (!S.days[n]) { const d = draftOf(n); d.photo = u; save(); }
+        PHOTO[n] = u; paint();
+        return sendPhoto(n, u).then(() => { paint(); if (S.days[n]) renderDay(); });
+      }).catch(() => { prev.innerHTML = '<p class="err">That photo did not work. Try another one.</p>'; });
+    }
+    ["#ph", "#ph2"].forEach(s => { const i = box.querySelector(s); if (i) i.onchange = () => { pick(i.files && i.files[0]); i.value = ""; }; });
+    const cb = box.querySelector("#camBtn");
+    if (cb) cb.onclick = () => webcam(box.querySelector("#camBox"), u => { PHOTO[n] = u; if (!S.days[n]) { draftOf(n).photo = u; save(); } paint(); sendPhoto(n, u).then(() => { paint(); if (S.days[n]) renderDay(); }); });
+    paint("init");
+    watchPhoto(n, () => { if (!box.isConnected) return; if (S.days[n]) renderDay(); else paint(); });
+    return box;
+  }
+  /* a computer with no phone: take the photo with its own camera (point the screen at the sky) */
+  function webcam(host, done) {
+    if (!host) return;
+    host.innerHTML = '<p class="vn">Opening the camera… allow it if the browser asks.</p>';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false }).then(stream => {
+      const stop = () => stream.getTracks().forEach(t => t.stop());
+      host.innerHTML = '<div class="cambox"><video autoplay playsinline muted></video><p class="vn">Turn the screen so the camera sees the sky, then take the photo.</p>' +
+        '<div class="btns"><button class="btn g" type="button" data-a="snap">Take the photo</button><button class="btn ghost" type="button" data-a="stop">Cancel</button></div></div>';
+      const v = host.querySelector("video"); v.srcObject = stream;
+      host.querySelector('[data-a="stop"]').onclick = () => { stop(); host.innerHTML = ""; };
+      host.querySelector('[data-a="snap"]').onclick = () => {
+        const w = v.videoWidth || 640, h = v.videoHeight || 480, s = Math.min(1, 900 / Math.max(w, h));
+        const c = document.createElement("canvas"); c.width = Math.round(w * s); c.height = Math.round(h * s);
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        stop(); host.innerHTML = "";
+        done(c.toDataURL("image/jpeg", 0.62));
+      };
+    }).catch(() => { host.innerHTML = '<p class="err">The camera did not open. Allow the camera for this page, or use a phone.</p>'; });
+  }
+  /* the phone side of the QR code: take one photo for one day and send it (nothing is kept on the phone) */
+  function renderPhotoMode(code, n) {
+    document.title = "Sky photo · My 7-Day Air Watch";
+    const lv = $("#live"); if (lv) lv.style.display = "none";
+    const bt = $("#barTitle"); if (bt) bt.textContent = "Sky photo · My 7-Day Air Watch";
+    $("#hdr").innerHTML = '<div class="hero"><h1>Sky photo for Day ' + n + '</h1><p class="sub">' + esc(pretty(dateOfDay(n))) + ' · Ảnh bầu trời cho Ngày ' + n + '</p></div>';
+    const c = el("div", "card phmode");
+    c.innerHTML = '<div class="eyebrow" id="pmWho">Code ' + esc(code) + '</div>' +
+      '<p style="margin:4px 0 10px">Point the phone at the sky above the buildings. <b>Sky only</b> — no people, no house numbers. <span class="vn">Chỉ chụp bầu trời.</span></p>' +
+      '<div class="btns" style="margin-top:0"><label class="btn g filebtn big">Take the photo<input type="file" id="pmCam" accept="image/*" capture="environment"></label>' +
+      '<label class="btn ghost filebtn">Choose a photo I took<input type="file" id="pmPick" accept="image/*"></label></div>' +
+      '<div id="pmPrev"></div><div class="btns" id="pmBtns" hidden><button class="btn g big" id="pmSend" type="button">Send to my computer</button></div><div id="pmMsg"></div>';
+    $("#dayWrap").appendChild(c);
+    const msg = c.querySelector("#pmMsg"), prev = c.querySelector("#pmPrev"), btns = c.querySelector("#pmBtns"), send = c.querySelector("#pmSend");
+    const on = window.AWSYNC && AWSYNC.available();
+    if (!on) msg.innerHTML = '<div class="note">This phone cannot reach the class page right now. Check the internet, then open the link again.</div>';
+    else AWSYNC.getPath("roster/" + code).then(r => {
+      c.querySelector("#pmWho").textContent = r && r.n ? "For " + r.n + (r.c ? " · " + r.c : "") : "Code " + code;
+      if (!r) msg.innerHTML = '<div class="note">We could not find this Air Watch. Scan the square on your computer again.</div>';
+    });
+    let url = null;
+    const pick = f => {
+      if (!f) return;
+      prev.innerHTML = '<p class="vn">Getting your photo ready…</p>'; msg.innerHTML = ""; btns.hidden = true;
+      compress(f, 900, 0.62).then(u => { url = u; prev.innerHTML = '<img class="thumb big" alt="Your sky photo" src="' + u + '">'; btns.hidden = false; send.disabled = false; send.textContent = "Send to my computer"; })
+        .catch(() => { prev.innerHTML = '<p class="err">That photo did not work. Take it again.</p>'; });
+    };
+    ["#pmCam", "#pmPick"].forEach(s => { const i = c.querySelector(s); i.onchange = () => { pick(i.files && i.files[0]); i.value = ""; }; });
+    send.onclick = () => {
+      if (!url || !on) return;
+      send.disabled = true; send.textContent = "Sending…";
+      AWSYNC.savePhoto(code, n, url).then(ok => {
+        if (!ok) { send.disabled = false; send.textContent = "Send to my computer"; msg.innerHTML = '<p class="err">It did not send. Check the internet and tap Send again.</p>'; return; }
+        /* the day may already be saved: mark it as having its photo */
+        AWSYNC.getPath("students/" + code + "/days/" + n + "/a/aqi").then(a => { if (a != null) AWSYNC.setPath("students/" + code + "/days/" + n + "/photo", true); });
+        btns.hidden = true;
+        msg.innerHTML = '<div class="ok"><b>Sent ✓</b> Look at your computer — the photo is there. You can close this page. <span class="vn">Đã gửi — xem trên máy tính.</span></div>';
+      });
+    };
+  }
+
   function compress(file, max, q) {
     return new Promise((res, rej) => {
       const url = URL.createObjectURL(file); const img = new Image();
@@ -1027,14 +1390,19 @@
 
   /* ───────── boot ───────── */
   function renderAll() { renderHeader(); renderSetup(); renderWeek(); renderDay(); renderQuestion(); renderExtra(); paintLive(); if (setupDone()) startCollector(); }
+  const linkCode = (/[?&]code=([A-Za-z0-9]{6})(?:&|$)/.exec(location.search) || [])[1];
+  const photoDay = +((/[?&]photo=(\d{1,2})(?:&|$)/.exec(location.search) || [])[1] || 0);
+  /* the phone side of the QR code: only take and send one photo — this device's own log is not touched */
+  if (linkCode && photoDay >= 1 && photoDay <= C.days) { renderPhotoMode(linkCode.toUpperCase(), photoDay); return; }
   if (window.AWSYNC) {
     AWSYNC.onError(() => paintLive());
     AWSYNC.watchConfig(c => { const before = JSON.stringify(CFG.classStation || null); CFG = c || {}; if (JSON.stringify(CFG.classStation || null) !== before) { renderDay(); registerStation(); } });
   }
+  /* a student with no saved day yet copies the missed days first */
+  if (setupDone() && !savedCount() && missedDays().length) S.cu = true;
   saveLocal();
   renderAll();
   /* my own link (…homework.html?code=ABC123) opens my log on any device */
-  const linkCode = (/[?&]code=([A-Za-z0-9]{6})(?:&|$)/.exec(location.search) || [])[1];
   if (linkCode) { try { history.replaceState(null, "", location.pathname); } catch (e) {} }
   if (linkCode && linkCode.toUpperCase() !== S.code) loadCode(linkCode.toUpperCase(), null);
   else if (setupDone()) { push(); watchBack(); }

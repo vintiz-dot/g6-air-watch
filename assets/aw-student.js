@@ -33,7 +33,7 @@
   const namesOf = q => (Array.isArray(q && q.names) ? q.names : Object.values((q && q.names) || {})).filter(Boolean);
   const sameNames = (x, y) => x.map(v => txt(v).toLowerCase()).sort().join("|") === y.map(v => txt(v).toLowerCase()).sort().join("|");
 
-  let ST = {}, HOMEWORK = {}, PAIRS = {}, METER = {}, VOTES = {}, FEEDBACK = {}, SUGG = {};
+  let ST = {}, HOMEWORK = {}, PAIRS = {}, METER = {}, VOTES = {}, FEEDBACK = {}, SUGG = {}, QS = {};
   let SLOG = {}, SEST = {}, HWCFG = {};
   const dayDate = i => window.AWST ? window.AWST.dates(C.day1, C.days)[i - 1] : null;
   const shortDate = iso => { const p = String(iso).split("-").map(Number); return new Date(Date.UTC(p[0], p[1] - 1, p[2])).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }); };
@@ -150,7 +150,8 @@
     else {
       const pilot = P.names[(n - 1) % k], nav = P.names[n % k];
       r.innerHTML = '<span><b>Pilot:</b> ' + esc(pilot) + ' <i>hands on the laptop</i></span><span><b>Navigator:</b> ' + esc(nav) + ' <i>reads aloud, holds the book, speaks for you</i></span>' +
-        (k === 3 ? '<span><b>Checker:</b> ' + esc(P.names[(n + 1) % k]) + ' <i>checks the answer against our 3 goals</i></span>' : '');
+        (k === 3 ? '<span><b>Checker:</b> ' + esc(P.names[(n + 1) % k]) + ' <i>checks the answer against our 3 goals</i></span>' : '') +
+        '<span class="talkrule" title="' + esc(D.talkRule) + '"><b>' + esc(D.talkRuleShort) + '</b> <i>the Navigator says it, the Pilot types it</i></span>';
     }
     if (shown && shown !== n) { r.classList.remove("swap"); void r.offsetWidth; r.classList.add("swap"); }
   }
@@ -213,10 +214,21 @@
     const a = A(n);
     const w = el("div", "donebar");
     const b = el("button", "btn g", a.done ? "✓ Done — waiting for your teacher" : "We're done"); b.type = "button";
-    b.onclick = () => { a.done = true; saveAns(n, true); LS.markDone(P.pid, n, true); b.textContent = "✓ Done — waiting for your teacher"; paintChallenge(n, w); };
+    b.onclick = () => { a.done = true; saveAns(n, true); LS.markDone(P.pid, n, true); b.textContent = "✓ Done — waiting for your teacher"; paintBook(n, w); paintChallenge(n, w); };
     w.appendChild(b);
-    if (a.done) paintChallenge(n, w);
+    if (a.done) { paintBook(n, w); paintChallenge(n, w); }
     return w;
+  }
+  /* finished early: open the book at the right page and write the answers there first */
+  function paintBook(n, w) {
+    const items = (D.book || {})[n];
+    if (w.querySelector(".booknudge") || !items || !items.length) return;
+    const a = A(n);
+    const c = el("div", "booknudge", '<b>Finished early? Your book first.</b>' + items.map(x => '<div class="bn"><span class="pg">p.' + esc(x.p) + '</span><span><b>' + esc(x.what) + '</b> — ' + esc(x.do) + '</span></div>').join(""));
+    const l = el("label", "tickline", '<input type="checkbox"' + (a.nb ? " checked" : "") + '> We wrote it in our books');
+    l.querySelector("input").onchange = e => { a.nb = e.target.checked; saveAns(n, true); };
+    c.appendChild(l);
+    w.appendChild(c);
   }
   function paintChallenge(n, w) {
     if (w.querySelector(".challenge") || !D.challenge[n]) return;
@@ -243,8 +255,8 @@
         }
         h += '<button class="mday" disabled><i>Day ' + i + '</i><span>–</span></button>'; continue;
       }
-      const c = CAT(d.a.aqi), right = c && d.g && d.g.guess === c.k;
-      h += '<button class="mday" data-code="' + esc(code) + '" data-day="' + i + '"><i>Day ' + i + '</i><span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + d.a.aqi + '</span><em>' + (right ? "eyes ✓" : "eyes ✗") + '</em></button>';
+      const c = CAT(d.a.aqi), looked = !!(d.g && d.g.guess), right = c && looked && d.g.guess === c.k;
+      h += '<button class="mday" data-code="' + esc(code) + '" data-day="' + i + '"' + (looked ? '' : ' title="Catch-up day: copied from the station record, no guess"') + '><i>Day ' + i + '</i><span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + d.a.aqi + '</span><em>' + (!looked ? "copied" : right ? "eyes ✓" : "eyes ✗") + '</em></button>';
     }
     return h + '</div>' + (filled ? '<p class="vn filledn">Grey days: not logged, or the number did not match the station — the number shown is the station’s (≈ = estimate). No ✓ or ✗.</p>' : '');
   }
@@ -298,6 +310,7 @@
         if (!LS.available()) { a.qPosted = 1; saveAns(n); $("#qdone").textContent = "Saved on this laptop."; }
       };
       if (a.qPosted) $("#qdone").textContent = "Posted ✓";
+      box.appendChild(el("div", "invite", '<b>Your idea counts.</b> ' + esc(D.invite)));
       paint2();
       box.appendChild(doneBar(n));
     },
@@ -409,7 +422,7 @@
 
     6(n, box) {
       const a = A(n); a.d1 = a.d1 || { pick: [], role: {} }; a.d2 = a.d2 || {}; a.tw2 = a.tw2 || [];
-      box.innerHTML = header(n);
+      box.innerHTML = header(n) + '<div class="bridge"><b>Before the graphs</b> ' + esc(D.inv2.bridge) + '</div>';
       const q1 = D.inv2.dbq1;
       const t1 = el("div", "task", bookBox(q1.page, q1.lead) + '<img class="graph" alt="Carbon dioxide concentration from 800,000 BCE to 2015 CE, and from 1950 to 2015" src="' + q1.img + '"><p class="bt">' + esc(q1.q) + '</p><div id="d1opts"></div><div id="d1role"></div>');
       box.appendChild(t1);
@@ -481,15 +494,16 @@
       };
       if (a.submitted) $("#ruleMsg").textContent = "Sent ✓";
       box.appendChild(el("div", "task", '<h3>Vote</h3><div id="rvote"><p class="vn">When your teacher puts three rules on the board, vote here for the one that works best in ANY city.</p></div>'));
+      box.appendChild(el("div", "task", '<h3>Back to our Wonder Wall</h3><p class="vn">' + esc(D.wonder.q) + ' Tap the one we can answer now — then tell your partner one that is still open.</p><div class="wwall" id="ww7"></div>'));
       const bk = el("div", "task", bookBox(D.gen.bookQ1.page, D.gen.bookQ1.text, '<p class="vn">Write the class rule — or your own better version — in your book.</p>'));
       bk.appendChild(tick(n, "book", "We wrote it in our books"));
       box.appendChild(bk);
-      paint7();
+      paint7(); paintWall();
       box.appendChild(doneBar(n));
     },
 
     8(n, box) {
-      const a = A(n); a.q3 = a.q3 || []; a.plan = a.plan || {};
+      const a = A(n); a.q3 = a.q3 || []; a.plan = a.plan || {}; a.why = a.why || {};
       box.innerHTML = header(n);
       const q3 = D.transfer.q3;
       const t = el("div", "task", bookBox(q3.page, q3.text) + '<div id="q3opts"></div><div id="q3key"></div>');
@@ -505,10 +519,18 @@
       fs.appendChild(frameInputs(n, "fD", D.transfer.failD, 1));
       fs.appendChild(frameInputs(n, "fE", D.transfer.failE, 1));
       box.appendChild(fs);
-      const pl = el("div", "task", '<h3>Fix our week</h3><p class="vn">Our numbers disagreed. Design a way to measure where our numbers would NOT disagree.</p>');
-      D.transfer.plan.forEach(([k, label]) => { pl.appendChild(el("label", "", esc(label))); const i = el("input"); i.value = a.plan[k] || ""; i.oninput = () => { a.plan[k] = i.value; saveAns(n); }; pl.appendChild(i); });
+      const pl = el("div", "task", '<h3>Fix our week</h3><p class="vn">Our numbers disagreed. Design a way to measure where our numbers would NOT disagree. Every part ends with <b>because…</b> — a reason that points to a problem in our week.</p>');
+      D.transfer.plan.forEach(([k, label]) => {
+        pl.appendChild(el("label", "", esc(label)));
+        const row = el("div", "because");
+        const i = el("input"); i.value = a.plan[k] || ""; i.dataset.plan = k; i.placeholder = "Our choice…"; i.oninput = () => { a.plan[k] = i.value; saveAns(n); };
+        const w = el("input"); w.value = a.why[k] || ""; w.dataset.why = k; w.placeholder = "the problem in our week it fixes"; w.oninput = () => { a.why[k] = w.value; saveAns(n); };
+        row.appendChild(i); row.appendChild(el("span", "bc", "because")); row.appendChild(w);
+        pl.appendChild(row);
+      });
       pl.appendChild(el("label", "", esc(D.transfer.ask) + "…"));
-      const ask = el("input"); ask.value = a.ask || ""; ask.placeholder = "e.g. whether our WHEN is fair"; ask.oninput = () => { a.ask = ask.value; saveAns(n); }; pl.appendChild(ask);
+      const ask = el("input"); ask.value = a.ask || ""; ask.dataset.ask = "1"; ask.placeholder = "e.g. whether our WHEN is fair"; ask.oninput = () => { a.ask = ask.value; saveAns(n); }; pl.appendChild(ask);
+      pl.appendChild(ladderBox());
       box.appendChild(pl);
       box.appendChild(el("div", "task", '<h3>Check another pair’s plan</h3><div id="peer"></div>'));
       paint8();
@@ -516,13 +538,16 @@
     },
 
     9(n, box) {
-      const a = A(n); a.rate = a.rate || [{}, {}, {}]; a.rec = a.rec || {};
+      const a = A(n); a.rate = a.rate || [{}, {}, {}]; a.rec = a.rec || {}; a.recBy = E_arr(a.recBy);
       box.innerHTML = header(n);
       const v = el("div", "task", '<h3>' + esc(D.vote.q) + '</h3><p class="vn">Same question as the start. Answer again.</p>');
       v.appendChild(chips(D.vote.opts, a.post, k => { a.post = k; saveAns(n, true); }));
       v.appendChild(chips([["1", "Not sure"], ["2", "Quite sure"], ["3", "Very sure"]], a.postConf, k => { a.postConf = k; saveAns(n); }));
       box.appendChild(v);
-      const g = el("div", "task", '<h3>Today’s goals — from memory</h3><p class="vn">Do not look at the goals. Write them in your own words — a few words is enough.</p>' +
+      const g = el("div", "task", '<h3>Today’s goals — from memory</h3>' +
+        '<p><b>1 · ' + esc(D.reflect.alone) + '</b> <span class="vn">Viết mục tiêu vào sách, một mình.</span></p>' +
+        '<label class="tickline"><input type="checkbox" id="recBook"' + (a.recBook ? " checked" : "") + '> Each of us wrote both goals in our own book</label>' +
+        '<p style="margin-top:10px"><b>2 · Now together:</b> compare, then type your best version — a few words is enough.</p>' +
         '<label for="gmS"><span class="gtag g-sci">Science</span> Our science goal today was…</label><textarea id="gmS" rows="2" placeholder="I can explain…"></textarea>' +
         '<label for="gmT"><span class="gtag g-think">Thinking</span> Our thinking goal today was…</label><textarea id="gmT" rows="2" placeholder="I can…"></textarea>' +
         '<div class="btns"><button class="btn" id="gmb">Check our answers</button></div><div class="err" id="gme"></div><div id="rate"></div>');
@@ -531,7 +556,9 @@
       gS.value = a.memSci || ""; gT.value = a.memThink || "";
       gS.oninput = () => { a.memSci = gS.value; saveAns(n); };
       gT.oninput = () => { a.memThink = gT.value; saveAns(n); };
+      g.querySelector("#recBook").onchange = e => { a.recBook = e.target.checked; saveAns(n, true); };
       $("#gmb").onclick = () => {
+        if (!a.recBook) { $("#gme").textContent = "First write both goals in your own books — alone, from memory."; return; }
         if (txt(a.memSci).length < 6 || txt(a.memThink).length < 6) { $("#gme").textContent = "Write both goals first."; return; }
         $("#gme").textContent = ""; a.goalsShown = LS.now(); saveAns(n, true); paintRate();
       };
@@ -544,6 +571,14 @@
           row.appendChild(chips([["got", "Got it"], ["partly", "Partly"], ["missed", "Missed it"]], a.rec[k], v => { a.rec[k] = v; a.recall = ["sci", "think"].filter(x => a.rec[x] === "got").length; saveAns(n, true); }, "sm"));
           r.appendChild(row);
         });
+        /* each student: did I have both in my own book? */
+        const hb = el("div", "hadboth", '<p><b>Hands up if you had both!</b> Each of you — what did you write in your own book?</p>');
+        P.names.forEach((nm, i) => {
+          const row = el("div", "qrow", '<span>' + esc(nm) + '</span>');
+          row.appendChild(chips(D.reflect.had, a.recBy[i] || null, v => { a.recBy[i] = v; saveAns(n, true); }, "sm"));
+          hb.appendChild(row);
+        });
+        r.appendChild(hb);
         r.appendChild(el("p", "vn", "Now judge yourselves on all three goals: NOT YET, ALMOST or YES — and the screen that proves it."));
         D.goals.forEach((goal, i) => {
           const row = el("div", "raterow", '<p><span class="gtag g-' + goal.k + '">' + esc(goal.short) + '</span> ' + esc(goal.text) + '</p>');
@@ -552,19 +587,42 @@
           s.onchange = () => { a.rate[i].ev = s.value; saveAns(n); };
           row.appendChild(s); r.appendChild(row);
         });
+        r.appendChild(el("label", "", esc(D.reflect.e12)));
+        const e12 = el("input"); e12.id = "e12"; e12.placeholder = "In E12 I will…"; e12.value = a.e12 || ""; e12.oninput = () => { a.e12 = e12.value; saveAns(n); };
+        r.appendChild(e12);
       }
       paintRate();
       box.appendChild(el("div", "task", '<h3>Feedback on our plan</h3><div id="fbin"></div>'));
+      const ww = el("div", "task", '<h3>Back to our Wonder Wall</h3><p class="vn">' + esc(D.wonder.q) + '</p><div class="wwall" id="ww9"></div>' +
+        '<label for="sharp">' + esc(D.wonder.sharp) + '</label><textarea id="sharp" rows="2" maxlength="200"></textarea><div class="btns"><button class="btn" type="button" id="sharpGo">Post our sharper question</button></div><div class="vn" id="sharpMsg"></div>');
+      box.appendChild(ww);
+      const sh = ww.querySelector("#sharp"); sh.placeholder = D.wonder.sharpPh; sh.value = a.sharp || ""; sh.oninput = () => { a.sharp = sh.value; saveAns(n); };
+      if (a.sharpPosted) ww.querySelector("#sharpMsg").textContent = "Posted ✓ — it goes on the Wonder Wall for E12.";
+      ww.querySelector("#sharpGo").onclick = () => {
+        const q = txt(a.sharp);
+        if (q.length < 8) { ww.querySelector("#sharpMsg").textContent = "Write a full question first."; return; }
+        a.sharpPosted = LS.now(); saveAns(n, true);
+        LS.addQuestion(P.pid, { text: q, starter: "", n: 9, sharp: true }).then(() => { ww.querySelector("#sharpMsg").textContent = "Posted ✓ — it goes on the Wonder Wall for E12."; });
+        if (!LS.available()) ww.querySelector("#sharpMsg").textContent = "Saved on this laptop.";
+      };
       const ex = el("div", "task", bookBox(D.reflect.bookQ4.page, D.reflect.bookQ4.text, '<p class="vn">Write it in your book. Stretch: “I used to think… Now I think…”</p>'));
       const ei = el("input"); ei.placeholder = "We need to talk about air quality because…"; ei.value = a.exit || ""; ei.oninput = () => { a.exit = ei.value; saveAns(n); }; ex.appendChild(ei);
       ex.appendChild(tick(n, "book", "We wrote it in our books"));
       box.appendChild(ex);
       box.appendChild(el("div", "note", esc(D.reflect.next)));
-      paint9();
+      paint9(); paintWall();
       box.appendChild(doneBar(n));
     }
   };
 
+  const E_arr = v => Array.isArray(v) ? v.filter(x => x != null) : (v && typeof v === "object") ? Object.values(v) : [];
+  function ladderBox() {
+    const d = el("details", "ladder");
+    d.open = true;
+    d.innerHTML = '<summary>How good is our plan? The ladder</summary><ol>' + D.transfer.ladder.map((x, i) =>
+      '<li class="' + (i === 2 ? "target" : "") + '"><b>' + esc(x.lv) + '</b> ' + esc(x.sounds) + '<br><i>' + esc(x.ex) + '</i></li>').join("") + '</ol>';
+    return d;
+  }
   function ruleText(f, parts) { let s = ""; f.parts.forEach((p, i) => { s += p + " "; if (parts[i]) s += txt(parts[i]) + " "; }); return txt(s.replace(/\s+/g, " ")); }
   function goalsCard() { return el("div", "goals", '<b>Our 3 goals today</b><ul class="glist">' + D.goals.map(g => '<li><span class="gtag g-' + g.k + '">' + esc(g.short) + '</span> ' + esc(g.text) + '</li>').join("") + '</ul>'); }
 
@@ -701,17 +759,28 @@
     if (box.dataset.tgt === tgt.pid && box.dataset.filled === String(!!Object.keys(plan).length) && box.dataset.sent === String(!!mine)) return;
     box.dataset.tgt = tgt.pid; box.dataset.filled = String(!!Object.keys(plan).length); box.dataset.sent = String(!!mine);
     if (!Object.keys(plan).length) { box.innerHTML = '<p class="vn">Station ' + tgt.st + ' is still writing their plan…</p>'; return; }
-    box.innerHTML = '<div class="plan"><b>Station ' + tgt.st + '’s plan</b>' + D.transfer.plan.map(([k2, l]) => '<p><i>' + esc(l.split("?")[0]) + ':</i> ' + esc(plan[k2] || "—") + '</p>').join("") + (their.ask ? '<p class="vn">They want feedback on: ' + esc(their.ask) + '</p>' : '') + '</div>';
+    const why = their.why || {};
+    box.innerHTML = '<div class="plan"><b>Station ' + tgt.st + '’s plan</b>' + D.transfer.plan.map(([k2, l]) => '<p><i>' + esc(l.split("?")[0]) + ':</i> ' + esc(plan[k2] || "—") +
+      (txt(why[k2]) ? ' <b class="bc">because</b> ' + esc(why[k2]) : ' <span class="vn">(no reason)</span>') + '</p>').join("") + (their.ask ? '<p class="vn">They want feedback on: ' + esc(their.ask) + '</p>' : '') + '</div>';
     const f = el("div", "");
     const ticks = {};
-    D.transfer.checks.forEach(c => { const l = el("label", "tickline", '<input type="checkbox"> ' + esc(c)); l.querySelector("input").onchange = e => { ticks[c] = e.target.checked; }; f.appendChild(l); });
+    f.appendChild(el("p", "vn", esc(D.transfer.checkRule)));
+    D.transfer.checks.forEach((c, i) => {
+      const k2 = D.transfer.plan[i][0], ok = !!(txt(plan[k2]) && txt(why[k2]));
+      const l = el("label", "tickline" + (ok ? "" : " off"), '<input type="checkbox"' + (ok ? "" : " disabled") + '> ' + esc(c) + (ok ? "" : ' <span class="vn">— no reason given</span>'));
+      l.querySelector("input").onchange = e => { ticks[c] = e.target.checked; };
+      f.appendChild(l);
+    });
+    let lvl = null;
+    f.appendChild(el("p", "vn", "Which step of the ladder is their plan on?"));
+    f.appendChild(chips(D.transfer.ladder.map((x, i) => [String(i + 1), x.lv.split(" — ")[0]]), null, k => { lvl = +k; }, "sm"));
     const s1 = el("input"); s1.placeholder = "One strength: …"; const s2 = el("input"); s2.placeholder = "One question: …";
     f.appendChild(s1); f.appendChild(s2);
     const b = el("button", "btn", mine ? "Update our feedback" : "Send our feedback"); b.type = "button";
     const msg = el("p", "vn", mine ? "Sent ✓" : "");
     b.onclick = () => {
       if (txt(s1.value).length < 5 || txt(s2.value).length < 5) { msg.textContent = "Write a strength and a question."; return; }
-      LS.sendFeedback(tgt.pid, { from: P.pid, fromSt: P.st, ticks: D.transfer.checks.filter(c => ticks[c]), strength: txt(s1.value), question: txt(s2.value) });
+      LS.sendFeedback(tgt.pid, { from: P.pid, fromSt: P.st, ticks: D.transfer.checks.filter(c => ticks[c]), level: lvl, strength: txt(s1.value), question: txt(s2.value) });
       A(8).reviewed = tgt.pid; saveAns(8, true); msg.textContent = "Sent ✓";
     };
     f.appendChild(b); f.appendChild(msg);
@@ -723,11 +792,27 @@
     const a = A(9);
     if (!f) { b.innerHTML = '<p class="vn">No feedback yet.</p>'; return; }
     if (b.dataset.at === String(f.at)) return; b.dataset.at = String(f.at);
-    b.innerHTML = '<div class="plan"><p>From station ' + esc(f.fromSt) + ': ✓ ' + esc((f.ticks || []).join(", ") || "no ticks") + '</p><p><b>Strength:</b> ' + esc(f.strength) + '</p><p><b>Question:</b> ' + esc(f.question) + '</p></div>';
+    const lv = f.level && D.transfer.ladder[f.level - 1];
+    b.innerHTML = '<div class="plan"><p>From station ' + esc(f.fromSt) + ': parts with a reason ✓ ' + esc((E_arr(f.ticks)).join(", ") || "none") + (lv ? ' · ladder: <b>' + esc(lv.lv) + '</b>' : '') + '</p><p><b>Strength:</b> ' + esc(f.strength) + '</p><p><b>Question:</b> ' + esc(f.question) + '</p></div>';
     const i = el("input"); i.placeholder = "One thing we will change in our plan…"; i.value = a.change || ""; i.oninput = () => { a.change = i.value; saveAns(9); };
     b.appendChild(i);
   }
-  function repaintLive() { const n = screenNow(); if (n === 1) repaintWeek(); if (n === 2) paint2(); if (n === 3) paintMeter(); if (n === 4) paint4(); if (n === 5) paint5(); if (n === 6) paint6(); if (n === 7) paint7(); if (n === 8) paint8(); if (n === 9) paint9(); }
+  function paintWall() {
+    const n = screenNow(), box = $(n === 7 ? "#ww7" : "#ww9"); if (!box) return;
+    const qs = Object.keys(QS).map(k => Object.assign({ id: k }, QS[k])).filter(q => q.ok === true).sort((x, y) => x.at - y.at);
+    const a = A(n), key = JSON.stringify([qs.map(q => q.id + q.text), a.wwNow || null]);
+    if (box.dataset.key === key) return; box.dataset.key = key;
+    if (!qs.length) { box.innerHTML = '<p class="vn">No questions on the wall yet — your teacher puts them up from screen 2.</p>'; return; }
+    box.innerHTML = "";
+    const list = el("div", "chips");
+    qs.slice(-10).forEach(q => {
+      const b = el("button", "chip wide" + (a.wwNow === q.id ? " on" : ""), esc(q.text) + (a.wwNow === q.id ? '<small>we can answer this now</small>' : '')); b.type = "button";
+      b.onclick = () => { a.wwNow = a.wwNow === q.id ? null : q.id; a.wwText = a.wwNow ? q.text : null; saveAns(n, true); box.dataset.key = ""; paintWall(); };
+      list.appendChild(b);
+    });
+    box.appendChild(list);
+  }
+  function repaintLive() { const n = screenNow(); if (n === 1) repaintWeek(); if (n === 2) paint2(); if (n === 3) paintMeter(); if (n === 4) paint4(); if (n === 5) paint5(); if (n === 6) paint6(); if (n === 7) { paint7(); paintWall(); } if (n === 8) paint8(); if (n === 9) { paint9(); paintWall(); } }
 
   /* ───────── dock: help, ideas, goals ───────── */
   function setupDock() {
@@ -820,6 +905,7 @@
     LS.watchMeter(v => { METER = v || {}; if (screenNow() === 3) paintMeter(); });
     LS.watchVotes(v => { VOTES = v || {}; });
     LS.watchFeedback(v => { FEEDBACK = v || {}; if (screenNow() === 8) paint8(); if (screenNow() === 9) paint9(); });
+    LS.watchQuestions(v => { QS = v || {}; if (joined() && (screenNow() === 7 || screenNow() === 9)) paintWall(); });
     watchMyNudges();
     LS.watchSuggestions(v => {
       SUGG = v || {};

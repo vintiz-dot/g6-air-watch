@@ -158,7 +158,7 @@
     bad: (s, d) => badDay(s, d),
     guessScore(students) {
       let right = 0, total = 0;
-      HW.list(students).forEach(s => HW.days(s).forEach(d => { const c = CAT(d.a.aqi); if (!c || !d.g) return; total++; if (d.g.guess === c.k) right++; }));
+      HW.list(students).forEach(s => HW.days(s).forEach(d => { const c = CAT(d.a.aqi); if (!c || !d.g || !d.g.guess) return; total++; if (d.g.guess === c.k) right++; }));   /* catch-up days have no guess */
       return { right, total, pct: U.pct(right, total) };
     },
     /* class-station readings: time comparison at one place */

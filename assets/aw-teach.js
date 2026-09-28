@@ -146,14 +146,29 @@
       return;
     }
     if (mode === "running") {
-      s.innerHTML = '<h3>Lesson running <small id="joinedTxt"></small></h3><p class="vn" id="runTxt"></p><div class="btns"><button class="btn sm ghost" id="endS" type="button"></button><button class="btn sm ghost danger" id="newS" type="button"></button></div>';
+      s.innerHTML = '<h3>Lesson running <small id="joinedTxt"></small></h3><p class="vn" id="runTxt"></p><div class="btns"><button class="btn sm ghost" id="endS" type="button"></button><button class="btn sm ghost danger" id="newS" type="button"></button></div>' + packRow();
       confirmBtn($("#endS"), "End the lesson", "Click again to end", () => LS.endSession());
+      bindPack();
       confirmBtn($("#newS"), "New session", "Click again — clears everything", newSession);
       return;
     }
-    s.innerHTML = '<h3>Lesson ended <small id="joinedTxt"></small></h3><p class="vn">The laptops show “The lesson has finished”. All work stays saved.</p><div class="btns"><button class="btn sm" id="reopen" type="button">Re-open the lesson</button><button class="btn sm ghost danger" id="newS" type="button"></button></div>';
+    s.innerHTML = '<h3>Lesson ended <small id="joinedTxt"></small></h3><p class="vn">The laptops show “The lesson has finished”. All work stays saved.</p>' + packRow(true) + '<div class="btns"><button class="btn sm" id="reopen" type="button">Re-open the lesson</button><button class="btn sm ghost danger" id="newS" type="button"></button></div>';
+    bindPack();
     $("#reopen").onclick = () => { LS.setState({ live: true, endedAt: null }); LS.logEvent("reopen", {}); };
     confirmBtn($("#newS"), "New session", "Click again — clears everything", newSession);
+  }
+  /* the print pack: every student's work on an A5 half-page, to glue into the notebook */
+  function packRow(big) {
+    return '<div class="packrow"><button class="btn ' + (big ? "g" : "sm ghost") + '" id="packBtn" type="button">Print pack — every student’s work (A5)</button><span class="vn" id="packMsg">' + (big ? "Two students per A4 sheet: print, cut, glue into the notebook. Save as PDF from the print window." : "") + '</span></div>';
+  }
+  function bindPack() {
+    const b = $("#packBtn"); if (!b) return;
+    b.onclick = () => {
+      if (!window.AWPACK) return;
+      const ok = AWPACK.open({ pairs: PAIRS, homework: HOMEWORK, feedback: FB, state: ST });
+      $("#packMsg").textContent = ok ? "Opened in a new window — press Print / Save as PDF there." : "The browser blocked the new window: allow pop-ups for this page and press again.";
+      LS.logEvent("pack", {});
+    };
   }
   function newSession() {
     LOC = { tab: LOC.tab }; saveLoc();
@@ -316,13 +331,17 @@
     if (n === 8) {
       const gave = new Set(Object.keys(FB).map(k => FB[k] && FB[k].from));
       h = '<b>Q3 (key A, B, C)</b>' + miniBars(tallyRows(8, a => a.q3, D.transfer.q3.opts.map((o, i) => [o[0], D.transfer.q3.short[i]]), ["A", "B", "C"]), "stack") +
-        '<b>Plans with 3+ parts:</b> ' + cnt(p => Object.values(A(p, 8).plan || {}).filter(x => txt(x)).length >= 3) + ' of ' + N + ' · <b>feedback sent:</b> ' + cnt(p => gave.has(p.pid)) + ' of ' + N;
+        '<b>Plans with 3+ parts:</b> ' + cnt(p => Object.values(A(p, 8).plan || {}).filter(x => txt(x)).length >= 3) + ' of ' + N + ' · <b>with a reason in every part:</b> ' + cnt(p => E.reasons(A(p, 8)) >= 4) + ' of ' + N + ' · <b>feedback sent:</b> ' + cnt(p => gave.has(p.pid)) + ' of ' + N;
     }
     if (n === 9) {
       const sh = E.shift(PAIRS);
       h = '<b>Before → now</b>' + miniBars(D.vote.opts.map(o => ({ label: o[1] + " (start " + sh.pre[o[0]] + ")", v: sh.post[o[0]], of: N, key: o[0] === "no" }))) +
         'Moved away from “yes”: ' + sh.moved + ' of ' + sh.both + '<br><b>From memory</b> — science goal got it: ' + cnt(p => (A(p, 9).rec || {}).sci === "got") + ', partly: ' + cnt(p => (A(p, 9).rec || {}).sci === "partly") +
         ' · thinking goal got it: ' + cnt(p => (A(p, 9).rec || {}).think === "got") + ', partly: ' + cnt(p => (A(p, 9).rec || {}).think === "partly") + ' (of ' + N + ') · self-rated all three: ' + cnt(p => E.arr(A(p, 9).rate).filter(r => r && r.lv).length === 3);
+      const hb = L.reduce((m, p) => { const x = E.hadBoth(p); m.both += x.both; m.marked += x.marked; return m; }, { both: 0, marked: 0 });
+      const stuN = L.reduce((s2, p) => s2 + p.names.length, 0);
+      h += '<br><b>Hands up — had both goals in their own book:</b> ' + hb.both + ' of ' + stuN + ' students' + (hb.marked < stuN ? ' (' + hb.marked + ' marked so far)' : '') +
+        ' · <b>In E12 I will…</b> ' + cnt(p => txt(A(p, 9).e12)) + ' of ' + N + ' · <b>sharper questions:</b> ' + Object.keys(QS).filter(k => QS[k] && QS[k].sharp).length;
       const typed = L.filter(p => txt(A(p, 9).memSci) || txt(A(p, 9).memThink)).sort((x, y) => x.st - y.st);
       if (typed.length) {
         const w = { got: "got it", partly: "partly", missed: "missed" };
@@ -451,8 +470,8 @@
       case 5: { const s = E.frameText(D.inv1.frame, a.fr, 2) || txt((a.place || {}).ev) || txt((a.time || {}).ev); return s ? ["What the AQI hides", s] : null; }
       case 6: { const s = E.frameText(["", D.inv2.tw2.frame[0], D.inv2.tw2.frame[1], D.inv2.tw2.frame[2]], a.tw2, 4); return s ? ["Evidence from our week", s] : null; }
       case 7: return txt(a.rule) ? ["A rule for any city", txt(a.rule)] : null;
-      case 8: { const p = a.plan || {}; const parts = D.transfer.plan.filter(([k]) => txt(p[k])).map(([k, l]) => l.split(/[?(]/)[0].replace(/ would.*| do you.*/i, "").trim() + ": " + txt(p[k])); return parts.length ? ["A fair way to measure", parts.join(" · ")] : null; }
-      case 9: return txt(a.exit) ? ["Why we need to talk about air quality", txt(a.exit)] : null;
+      case 8: { const p = a.plan || {}, w = a.why || {}; const parts = D.transfer.plan.filter(([k]) => txt(p[k])).map(([k, l]) => l.split(/[?(]/)[0].replace(/ would.*| do you.*/i, "").trim() + ": " + txt(p[k]) + (txt(w[k]) ? " because " + txt(w[k]) : "")); return parts.length ? ["A fair way to measure", parts.join(" · ")] : null; }
+      case 9: return txt(a.exit) ? ["Why we need to talk about air quality", txt(a.exit)] : (txt(a.sharp) && a.sharpPosted ? ["Our sharper question for E12", txt(a.sharp)] : null);
     }
     return null;
   }
@@ -536,7 +555,7 @@
       all.onclick = () => qs.filter(q => q.ok == null).forEach(q => LS.flagQuestion(q.id, true)); top.appendChild(all); body.appendChild(top);
       const list = el("div", "vlist"); body.appendChild(list);
       qs.forEach(q => {
-        const it = el("div", "vitem" + (q.ok === true ? " ok" : q.ok === false ? " hid" : ""), '<div class="meta">Station ' + esc(stOf(q.pid)) + ' · ' + clock(q.at) + (q.ok === true ? " · on the wall" : q.ok === false ? " · hidden" : " · new") + '</div>' + esc(q.text) + '<div class="acts"></div>');
+        const it = el("div", "vitem" + (q.ok === true ? " ok" : q.ok === false ? " hid" : ""), '<div class="meta">Station ' + esc(stOf(q.pid)) + ' · ' + clock(q.at) + (q.sharp ? " · sharper question (screen 9)" : "") + (q.ok === true ? " · on the wall" : q.ok === false ? " · hidden" : " · new") + '</div>' + esc(q.text) + '<div class="acts"></div>');
         const acts = it.querySelector(".acts");
         [["✓ Wall", () => LS.flagQuestion(q.id, true)], ["Hide", () => LS.flagQuestion(q.id, false)], ["★ Spotlight", () => { const p = PAIRS[q.pid] || { st: "?", names: [] }; spotlight(Object.assign({ pid: q.pid }, p), "Our question", q.text); }]]
           .forEach(([l, f]) => { const b = el("button", "btn ghost", l); b.type = "button"; b.onclick = f; acts.appendChild(b); });
@@ -601,6 +620,7 @@
       case "timer": return "Timer " + e.action;
       case "reopen": return "Lesson re-opened";
       case "end": return "Lesson ended";
+      case "pack": return "Print pack opened";
     }
     return e.kind;
   }

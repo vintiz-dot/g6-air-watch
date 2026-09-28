@@ -48,6 +48,7 @@
     box.innerHTML = h;
   }
   const votes = n => n + (n === 1 ? " vote" : " votes");
+  const wall = () => Object.keys(QS).map(k => QS[k]).filter(q => q && q.ok === true).sort((a, b) => a.at - b.at);
   const answered = (n, f) => pairsL().filter(p => f(((p.a || {})["s" + n]) || {})).length;
 
   /* ───────── the stage for each moment ───────── */
@@ -169,7 +170,7 @@
     },
 
     s6(stg) {
-      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>Data question 1 · book p.' + D.inv2.dbq1.page + ' <small>choose two</small></h3><img class="pimg big" alt="Carbon dioxide over time" src="' + D.inv2.dbq1.img + '"><div id="d1"></div></div>' +
+      stg.innerHTML = '<div class="pbridge"><b>CO₂ →</b> ' + esc(D.inv2.bridge) + '</div><div class="pgrid2"><div class="pcard"><h3>Data question 1 · book p.' + D.inv2.dbq1.page + ' <small>choose two</small></h3><img class="pimg big" alt="Carbon dioxide over time" src="' + D.inv2.dbq1.img + '"><div id="d1"></div></div>' +
         '<div class="pcard"><h3>Data question 2 · book p.' + D.inv2.dbq2.page + '</h3><img class="pimg big" alt="Carbon dioxide at Mauna Loa" src="' + D.inv2.dbq2.img + '"><div id="d2"></div></div></div>';
       return () => {
         const r = rev("dbq");
@@ -179,8 +180,12 @@
     },
 
     s7(stg) {
-      stg.innerHTML = '<div class="pcard" style="flex:1"><h3>Say it without Hanoi <small id="rn"></small></h3><div id="gv"></div></div>';
+      stg.innerHTML = '<div class="pgrid2" style="grid-template-columns:2.2fr 1fr"><div class="pcard"><h3>Say it without Hanoi <small id="rn"></small></h3><div id="gv"></div></div>' +
+        '<div class="pcard"><h3>Wonder Wall</h3><p class="pwq">' + esc(D.wonder.q) + '</p><div class="pwall one" id="ww7"></div></div></div>';
       return () => {
+        const qs = wall(), wk = JSON.stringify(qs.map(q => q.text));
+        const w7 = $("#ww7");
+        if (w7.dataset.key !== wk) { w7.dataset.key = wk; w7.innerHTML = qs.length ? qs.slice(-6).map(q => '<div>' + esc(q.text) + '</div>').join("") : '<p class="pnote" style="margin:0">No questions on the wall yet.</p>'; }
         const L = pairsL(), sent = answered(7, a => a.submitted);
         $("#rn").textContent = sent + " of " + L.length + " pairs have sent a rule";
         const gv = $("#gv"), rv = ST.ruleVote;
@@ -203,18 +208,20 @@
 
     s8(stg) {
       stg.innerHTML = '<div class="pgrid2" style="grid-template-columns:1.35fr 1fr"><div class="pcard"><h3>Book page ' + D.transfer.q3.page + ' · Q3 <small>choose three</small></h3><p style="margin:0 0 .5em;font-size:.8em;line-height:1.35">' + esc(D.transfer.q3.text) + '</p><div id="q3"></div></div>' +
-        '<div class="pcard"><h3>Fix our week</h3><div class="pframe" style="font-size:1em">Our numbers disagreed. Design a way where they would not.</div><ol class="pgoals" style="font-size:1em">' + D.transfer.plan.map(([k, l]) => '<li>' + esc(l) + '</li>').join("") + '</ol><div class="pgrid3" id="fx" style="margin-top:.6em"></div></div></div>';
+        '<div class="pcard"><h3>Fix our week <small>every part ends in “because…”</small></h3><div class="pframe" style="font-size:.9em">Our numbers disagreed. Design a way where they would not.</div><ol class="pgoals" style="font-size:.85em;line-height:1.3">' + D.transfer.plan.map(([k, l]) => '<li>' + esc(l) + ' <b style="color:var(--transfer)">because…</b></li>').join("") + '</ol>' +
+        '<ol class="pladder">' + D.transfer.ladder.map((x, i) => '<li class="' + (i === 2 ? "target" : "") + '"><b>' + esc(x.lv) + '</b> — ' + esc(x.sounds) + '<i>' + esc(x.ex) + '</i></li>').join("") + '</ol>' +
+        '<div class="pgrid3" id="fx" style="margin-top:.5em;font-size:.6em"></div></div></div>';
       return () => {
         const r = rev("q3");
         $("#q3").innerHTML = bars(tally(8, a => a.q3, D.transfer.q3.opts.map((o, i) => [o[0], D.transfer.q3.short[i]]), r ? ["A", "B", "C"] : []).rows, false, "wide") + (r ? '<p class="pnote" style="margin:.3em 0 0">A, B and C. Why would D and E fail?</p>' : '');
-        const L = pairsL(), plans = answered(8, a => Object.values(a.plan || {}).filter(x => U.txt(x)).length >= 3);
+        const L = pairsL(), plans = answered(8, a => D.transfer.plan.filter(([k]) => U.txt((a.plan || {})[k]) && U.txt((a.why || {})[k])).length >= 3);
         const gave = new Set(Object.keys(FB).map(k => FB[k] && FB[k].from)), fb = L.filter(p => gave.has(p.pid)).length;
-        $("#fx").innerHTML = '<div class="pbig" style="font-size:2.6em">' + plans + '<small>plans ready</small></div><div class="pbig" style="font-size:2.6em">' + fb + '<small>peer checks sent</small></div><div class="pbig" style="font-size:2.6em">' + L.length + '<small>pairs</small></div>';
+        $("#fx").innerHTML = '<div class="pbig" style="font-size:2.6em">' + plans + '<small>plans with reasons</small></div><div class="pbig" style="font-size:2.6em">' + fb + '<small>peer checks sent</small></div><div class="pbig" style="font-size:2.6em">' + L.length + '<small>pairs</small></div>';
       };
     },
 
     s9(stg) {
-      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>' + esc(D.vote.q) + '</h3><div id="sh"></div><p class="pnote" id="nx" style="margin-top:auto"></p></div><div class="pcard"><h3>Our 3 goals</h3><div id="gl"></div></div></div>';
+      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>' + esc(D.vote.q) + '</h3><div id="sh"></div><div id="ww9" style="margin-top:auto"></div><p class="pnote" id="nx" style="margin:.4em 0 0"></p></div><div class="pcard"><h3>Our 3 goals</h3><div id="gl"></div></div></div>';
       return () => {
         const L = pairsL(), sh = E.shift(PAIRS);
         const tot = o => Math.max(1, Object.values(o).reduce((s, v) => s + v, 0));
@@ -237,6 +244,8 @@
           const mem = k => '<span><span class="gtag g-' + k + '">' + (k === "sci" ? "Science" : "Thinking") + '</span> from memory: <b>' + got(k) + '</b> of ' + L.length + ' pairs got it</span>';
           $("#gl").innerHTML = '<div class="pmem">' + mem("sci") + mem("think") + '</div><ul class="pgoals rated labelled">' + rows + '</ul>';
         } else $("#gl").innerHTML = '<p class="pq" style="font-size:1.4em">From memory first — do not look!</p><p style="margin:0 0 .4em">Write our <span class="gtag g-sci">Science</span> goal and our <span class="gtag g-think">Thinking</span> goal on your laptop.</p><p class="pnote">' + typed + ' of ' + L.length + ' pairs have checked their answers.</p>';
+        const sharp = Object.keys(QS).filter(k => QS[k] && QS[k].sharp).length;
+        $("#ww9").innerHTML = '<p class="pwq" style="font-size:.9em;margin:.6em 0 .2em">Wonder Wall: ' + esc(D.wonder.q) + '</p><p class="pnote" style="margin:0">' + wall().length + ' questions on the wall · ' + sharp + ' sharper ' + (sharp === 1 ? "question" : "questions") + ' posted for E12</p>';
         $("#nx").textContent = D.reflect.next;
       };
     }
@@ -270,7 +279,7 @@
     const L = pairsL(), n = ST.screen || 1, running = ST.startedAt && ST.live !== false;
     const done = L.filter(p => p.done && p.done[n]).length;
     $("#pbot").innerHTML = '<span class="bq"><b>Big question:</b> ' + esc(D.bigQ) + '</span>' +
-      (running ? '<span class="cnt">Done: ' + done + ' of ' + L.length + ' pairs</span>' : '<span class="cnt">' + L.length + ' of ' + NST + ' stations</span>') +
+      (running ? '<span class="talk" title="' + esc(D.talkRule) + '">' + esc(D.talkRuleShort) + '</span><span class="cnt">Done: ' + done + ' of ' + L.length + ' pairs</span>' : '<span class="cnt">' + L.length + ' of ' + NST + ' stations</span>') +
       (aqNow ? '<span class="aqnow">Outside now · ' + esc(short(aqNow.name, 26)) + ' ' + U.catChip(aqNow.aqi) + '</span>' : '');
   }
   function paintSpot() {

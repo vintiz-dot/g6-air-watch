@@ -68,13 +68,23 @@ Then every day, in this order:
    On **Day 7** they write **all six parts** — the data for “what is the AQI made of?” in the lesson.
 3. **Check the class station**: AQI and PM2.5.
 4. **What was happening**: rain, wind, traffic, construction, smoke, incense/cooking, weekend…
-5. **Photo of the sky** (optional — sky only, no people).
+5. **Photo of the sky** — sky only, no people. **From 28 September a day saves only with a photo**:
+   it counts as much as the numbers (the lesson compares what the sky looked like with what the
+   station measured). On a phone the page opens the camera. On a computer it shows a **QR code**: the
+   student points a phone camera at it, takes the photo, taps *Send to my computer*, and the photo
+   appears on the computer by itself (the phone keeps nothing). No phone? *Use this computer's camera*,
+   or choose a photo already on the computer. Details in **4d**.
 
 The page tells them straight away whether their eyes were right, and reminds them to write the PM2.5
 number in the book table (page 34). After Day 7 they look back: how many guesses were right, their
 worst day and why — then **Hand in**.
 
-Missed a day? They can catch up; it is saved as **entered late**, with the real time it was typed.
+Missed a day? They can catch up; it is saved as **entered late**, with the real time it was typed. If
+they did not check that day, they tap *I did not check that day — copy the station's record* instead.
+
+**The first time** (a student with no saved day yet) the page first shows *How to find your numbers*
+(the six daily steps and the picture of a station page), then makes them **catch up** before today:
+details in **4d**.
 
 **The numbers are checked.** When a student types the AQI, the PM2.5 or the class station's AQI, the page
 compares it with that station (within 10 points). A number that does not match is not saved: the page
@@ -163,9 +173,33 @@ Settings are in `assets/aw-config.js` → `check` (margin 10 points, 3 tries, 30
 
 ---
 
+## 4d · Joining late, and the sky photo
+
+- **Walkthrough.** A student with no saved day sees *How to find your numbers* first: look and guess,
+  open the station (check its name), the AQI, the PM2.5 row, the “Updated” time, and the photo (with
+  the QR code for computers). *I know where to look — start* closes it. Anyone can open it again with
+  **How to find the numbers** under their name.
+- **Forced catch-up.** If days have already passed, today stays locked until every missed day is done.
+  For each missed day the page shows what **their station recorded at their time** — the saved window
+  reading, else the reading saved nearest to it, else a classmate's checked reading, else the model
+  **estimate** (marked ≈, with “write ≈ in your book”). They type the AQI and PM2.5 **exactly** as shown
+  (a different number is refused) and write them in the book, page 34. These days are saved as
+  **catch-up**: no guess, no photo, not counted in “Can you tell by looking?”. A day with no record
+  at all can be skipped (it stays empty). *I did check on this day* opens the normal form instead.
+- **Your page** marks catch-up days with **c** in the table, *catch-up · no guess* and *copied the
+  station record / the estimate* in the student's week, and a `catch_up` column in the CSV. The guess
+  totals (yours and the lesson's) count only days with a guess.
+- **The photo.** `photoFrom` in `assets/aw-config.js` (28 September) is the first day that needs one.
+  A photo is sent as soon as it is taken, so it is kept even if the day is saved later or on another
+  device. The phone page (`homework.html?code=ABC123&photo=6`, what the QR code opens) only takes and
+  sends that one photo; a student who cannot scan can type the address shown under the code. A saved
+  day without its photo (saved on an old copy of the page) shows **Add your sky photo**.
+
+---
+
 ## 5 · Privacy
 
-Stored: first name, class, the area they typed, their readings, their question and optional sky photos.
+Stored: first name, class, the area they typed, their readings, their question and their sky photos (sky only).
 No other personal data. To let students find their log again, a short list of names, classes, station
 names and days saved (`roster`) can be read by the homework page. Station readings hold no names. Photos must show the sky only. After E12, download the CSV, then use
 **Clear the whole homework room** at the bottom of the teacher page (it asks three times) — it also
@@ -224,16 +258,40 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 - **Goals** (right column): the class score for the Science, Language and Thinking goals, from the
   screens already finished, plus the screen you are on. Open **Every check** to see what is counted.
   Green is 80% or more. The projector’s top bar shows the same three scores.
-- Screen 2: each pair sees the questions both partners wrote at home and picks one to post.
+- **Every screen:** the bar at the top of each laptop (and the projector's bottom bar) shows the rule
+  *Talk first — then type*: the Navigator says it, the Pilot types what the Navigator said.
+- **Finished early?** When a pair presses *We're done*, the laptop sends them to their book first — the
+  exact page and question for that screen (p.30–34), with *We wrote it in our books* — then the challenge card.
+- Screen 2: each pair sees the questions both partners wrote at home and picks one to post. Under it,
+  the laptops invite them to press **Suggest a change** if a task could work better for them.
 - Screen 3: after “60 seconds later”, press **Show how small PM2.5 is** — the EPA hair-and-sand picture
   appears on the laptops and the projector.
-- Screen 6: the laptops show the pair’s whole week (and the class station); tapping a number fills
+- Screen 6: a short bridge before the graphs (laptops and projector): CO₂ is not in the AQI; at these
+  levels it warms the planet rather than hurting lungs — a different problem, the same skill of reading
+  a trend. The laptops show the pair’s whole week (and the class station); tapping a number fills
   “___ tells us that the AQI was ___ on ___”.
 - Screen 7: tick up to three rules → **Put the ticked rules to the vote** → **Close the vote** makes the
-  winner the class rule.
-- Screen 9: pairs type the science goal and the thinking goal from memory, press **Check our answers**,
-  and mark each one got it / partly / missed it; the run sheet lists what each pair typed. Then press
-  **Show the goals and self-ratings on the board**.
+  winner the class rule. The Wonder Wall is back (laptops and projector): *Which question can we answer
+  now? Which is still open?* Pairs tap the one they can answer now.
+- Screen 8: every part of the plan (where, when, how often, compared with what) ends in **because…**.
+  The four-step ladder (DOK 1 Recall → DOK 4 Design, level 3 is the target) is on the projector and
+  on each laptop. In the peer check a part can be ticked only if it has a reason, and the reviewers
+  place the plan on the ladder.
+- Screen 9: each student first writes both goals **alone, in their own book**, from memory (the laptop
+  asks them to confirm it). Then the pair types its best version, presses **Check our answers**, and
+  marks each goal got it / partly / missed it. After “Hands up if you had both”, **each student** marks
+  what they had in their own book — the run sheet and the observers' 3A.1 row count it in students.
+  They self-rate the three goals and finish **In E12 I will…**. Back to the Wonder Wall: each pair
+  posts one **sharper question** for E12 (it arrives in *Wonder questions* on your page, marked
+  *sharper*). Then press **Show the goals and self-ratings on the board**.
+- **After the bell — the print pack:** on your page, **Print pack — every student’s work (A5)** (in the
+  session card). A new window shows one A5 half-page per student, two per A4 sheet (landscape), with a
+  dashed cut line. Each student gets their group's answers under their own name, grouped by book page
+  (p.30 → p.34, then E12): Q1, Q2, the language item, Q3 and both data questions show their answer, ✓
+  or ✗ and the right answer; the sentences and the plan are printed as they wrote them; p.34 has their
+  own Air Watch week for the table. A ☐ marks every answer that goes in the book. Press **Print / Save
+  as PDF** → choose *Save as PDF* for a file, or print (A4, landscape, no margins). Long answers are
+  set a little smaller so each student fits one half-page.
 - Keys: **N** next screen · **B** back · **P** pause/resume · **+** one more minute · **Esc** end the spotlight.
 
 ### If something goes wrong
@@ -247,4 +305,4 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 - **Two laptops choose the same station:** the teacher view shows a warning on both cards.
 - **Never press “Start a new session” during the lesson** — it clears every answer (it asks twice).
 
-Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-27. PM2.5 size picture: U.S. EPA (public domain).
+Built for Victor Moronu, The Olympia Schools, Hanoi · build 2026-09-28c. PM2.5 size picture: U.S. EPA (public domain).

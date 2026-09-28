@@ -12,6 +12,10 @@
   const has = v => v !== null && v !== undefined && v !== "" && v !== false && !(Array.isArray(v) && !v.length);
   const S = (p, n) => (p && p.a && p.a["s" + n]) || {};
   const pl = (n, one, many) => n + " " + (n === 1 ? one : (many || one + "s"));
+  /* screen 8: plan parts that have a choice AND a reason ("because…") */
+  const reasons = a => D.transfer.plan.filter(([k]) => t((a.plan || {})[k]) && t((a.why || {})[k])).length;
+  /* screen 9: each student's own recall, marked after "Hands up if you had both" */
+  const hadBoth = p => { const r = arr(S(p, 9).recBy); return { both: r.filter(x => x === "both").length, marked: r.filter(Boolean).length }; };
 
 
   function pairs(P) {
@@ -63,8 +67,8 @@
       case 5: items = [a.hyp, nFilled(a.fr) >= 1, a.time && a.time.yn, a.place && a.place.yn, a.diff && a.diff.yn]; break;
       case 6: items = [arr(a.d1 && a.d1.pick).length === 2, Object.keys((a.d1 && a.d1.role) || {}).length >= 2, a.d2 && a.d2.pick, nFilled(a.tw2) >= 3, a.book]; break;
       case 7: items = [a.frame, a.submitted, a.book].concat(ctx.ruleVote ? [a.vote != null] : []); break;
-      case 8: items = [arr(a.q3).length === 3, nFilled(a.fD) >= 1, nFilled(a.fE) >= 1, Object.values(a.plan || {}).filter(x => t(x)).length >= 3, a.reviewed]; break;
-      case 9: items = [a.post, a.goalsShown, (a.rec || {}).sci && (a.rec || {}).think, arr(a.rate).filter(r => r && r.lv).length === 3, t(a.exit), a.book]; break;
+      case 8: items = [arr(a.q3).length === 3, nFilled(a.fD) >= 1, nFilled(a.fE) >= 1, Object.values(a.plan || {}).filter(x => t(x)).length >= 3, reasons(a) >= 3, a.reviewed]; break;
+      case 9: items = [a.post, a.recBook, a.goalsShown, (a.rec || {}).sci && (a.rec || {}).think, arr(a.recBy).filter(Boolean).length > 0, arr(a.rate).filter(r => r && r.lv).length === 3, t(a.e12), t(a.exit), a.book]; break;
       default: items = [];
     }
     return { got: items.filter(has).length, of: items.length };
@@ -134,7 +138,7 @@
         if (nFilled(a.fD)) out.push(q(D.transfer.failD[0] + " " + t(a.fD[0])));
         if (nFilled(a.fE)) out.push(q(D.transfer.failE[0] + " " + t(a.fE[0])));
         const pl = a.plan || {}, got = D.transfer.plan.filter(([k]) => t(pl[k]));
-        if (got.length) out.push("Plan " + got.length + "/4" + (t(pl.where) ? " · where: " + q(pl.where) : ""));
+        if (got.length) out.push("Plan " + got.length + "/4 · with a reason " + reasons(a) + "/4" + (t(pl.where) ? " · where: " + q(pl.where) + (t((a.why || {}).where) ? " because " + q(a.why.where) : "") : ""));
         if (a.reviewed) out.push("feedback sent ✓");
         break;
       }
@@ -144,8 +148,12 @@
           const r = a.rec || {}, w = { got: "got it", partly: "partly", missed: "missed" };
           out.push("from memory — science goal: " + (w[r.sci] || "…") + keyHint(a.memSci, "sci") + " · thinking goal: " + (w[r.think] || "…") + keyHint(a.memThink, "think"));
         }
+        const hb = arr(a.recBy);
+        if (hb.filter(Boolean).length) out.push("had both in their book: " + (p.names || []).map((nm, i) => U.esc(nm) + " " + ({ both: "✓", one: "½", none: "✗" }[hb[i]] || "…")).join(", "));
         const r = arr(a.rate).filter(x => x && x.lv);
         if (r.length) out.push("self-rating: " + r.map(x => ({ no: "not yet", almost: "almost", yes: "yes" }[x.lv])).join(", "));
+        if (t(a.e12)) out.push("E12: " + q(a.e12));
+        if (t(a.sharp) && a.sharpPosted) out.push("sharper question: " + q(a.sharp));
         if (t(a.exit)) out.push(q(a.exit));
         break;
       }
@@ -194,7 +202,7 @@
     { id: "t6",  g: "think", n: 6, label: "DBQ1 (p.33): one cause and one effect", test: a => { const x = MARK.dbq1(a); return x === null ? null : (x && MARK.dbq1roles(a) === true); } },
     { id: "t7",  g: "think", n: 7, label: "A rule for any city (no place name)", test: a => a.submitted ? (!!t(a.rule) && noPlace(a.rule)) : (a.frame ? false : null) },
     { id: "t8a", g: "think", n: 8, label: "Q3 (p.32): A, B and C", test: MARK.q3 },
-    { id: "t8b", g: "think", n: 8, label: "A fair plan: where, when, how often, compared with what", test: a => { const k = Object.values(a.plan || {}).filter(x => t(x)).length; return k ? k >= 4 : null; } }
+    { id: "t8b", g: "think", n: 8, label: "A fair plan: where, when, how often, compared with what — each with a reason", test: a => { const k = Object.values(a.plan || {}).filter(x => t(x)).length; return k ? (k >= 4 && reasons(a) >= 4) : null; } }
   ];
   /* key words that suggest a goal was recalled (teacher hint only) */
   const KW = {
@@ -248,8 +256,11 @@
     const rated = L.filter(p => arr(S(p, 9).rate).filter(r => r && r.lv).length === 3);
     const ratedEv = L.filter(p => arr(S(p, 9).rate).filter(r => r && r.lv && r.ev).length === 3);
     const a31 = L.filter(p => rec2.includes(p) && rated.includes(p));
-    rows.push({ code: "3A.1", name: "Setting objectives", when: 9, target: 80, pct: pc(a31.length), k: a31.length,
-      detail: "From memory — science goal: got it " + cntRec("sci", "got") + ", partly " + cntRec("sci", "partly") + " · thinking goal: got it " + cntRec("think", "got") + ", partly " + cntRec("think", "partly") + " · both goals right and all three self-assessed: " + a31.length + " of " + N + " pairs." });
+    /* each student's own recall (written alone in their book, then marked): counted in students when marked */
+    const stu = L.reduce((m, p) => { const h = hadBoth(p); m.both += h.both; m.marked += h.marked; return m; }, { both: 0, marked: 0 });
+    rows.push({ code: "3A.1", name: "Setting objectives", when: 9, target: 80, pct: stu.marked ? U.pct(stu.both, stu.marked) : pc(a31.length), k: stu.marked ? stu.both : a31.length,
+      detail: (stu.marked ? "Students who wrote both goals from memory in their own book: " + stu.both + " of " + stu.marked + " (marked after “Hands up if you had both”). " : "") +
+        "From memory — science goal: got it " + cntRec("sci", "got") + ", partly " + cntRec("sci", "partly") + " · thinking goal: got it " + cntRec("think", "got") + ", partly " + cntRec("think", "partly") + " · both goals right and all three self-assessed: " + a31.length + " of " + N + " pairs · “In E12 I will…” written: " + L.filter(p => t(S(p, 9).e12)).length + "." });
 
     /* 3A.2 standards shown on each task → pairs finishing each task */
     const done = n => L.filter(p => p.done && p.done[n]).length;
@@ -289,10 +300,13 @@
 
     /* 3D.1 questions */
     const qs = Object.keys(X.questions || {}).map(k => X.questions[k]);
-    const asked = new Set(qs.map(x => x.pid));
+    const qs2 = qs.filter(x => !x.sharp), sharp = qs.filter(x => x.sharp);
+    const asked = new Set(qs2.map(x => x.pid));
     const d1 = L.filter(p => asked.has(p.pid));
+    const wwNow = L.filter(p => S(p, 7).wwNow).length;
     rows.push({ code: "3D.1", name: "Questioning", when: 2, target: 80, pct: pc(d1.length), k: d1.length,
-      detail: "Pairs who posted their own question: " + d1.length + " of " + N + " · " + pl(qs.length, "question") + " posted (" + qs.filter(x => x.starter).length + " with a higher-order starter)." });
+      detail: "Pairs who posted their own question: " + d1.length + " of " + N + " · " + pl(qs2.length, "question") + " posted (" + qs2.filter(x => x.starter).length + " with a higher-order starter)" +
+        " · back to the Wonder Wall: " + wwNow + " pairs found a question they can answer now (screen 7), " + pl(sharp.length, "sharper question") + " for E12 (screen 9)." });
 
     /* 3D.2 feedback asked for, received, acted on */
     const fb = X.feedback || {};
@@ -310,8 +324,9 @@
 
     /* 3E.2 self- and peer assessment */
     const gave = L.filter(p => Object.keys(fb).some(k => fb[k] && fb[k].from === p.pid && t(fb[k].strength) && t(fb[k].question)));
+    const placed = Object.keys(fb).filter(k => fb[k] && fb[k].level).length;
     rows.push({ code: "3E.2", name: "Feedback to students", when: 8, target: 80, pct: pc(gave.length), k: gave.length,
-      detail: "Gave another pair a strength and a question: " + gave.length + " of " + N + " · self-assessed against the criteria: " + rated.length + " · teacher interventions during the peer check: " + peerInter + "." });
+      detail: "Gave another pair a strength and a question: " + gave.length + " of " + N + " · ticked only the plan parts with a reason, and placed " + placed + " plans on the ladder · self-assessed against the criteria: " + rated.length + " · teacher interventions during the peer check: " + peerInter + "." });
 
     /* 2B.2 procedures */
     const t0 = ST.startedAt;
@@ -342,5 +357,5 @@
     return "low";
   }
 
-  window.AWE = { pairs, evList, progress, summary, checks, tally, shift, rubric, MARK, label, frameText, arr, goalChecks: GC, goals, pairGoals, goalTone, keyHits };
+  window.AWE = { pairs, evList, progress, summary, checks, tally, shift, rubric, MARK, label, frameText, arr, goalChecks: GC, goals, pairGoals, goalTone, keyHits, reasons, hadBoth };
 })();

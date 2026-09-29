@@ -105,6 +105,16 @@
     /* live camera (cam.html on the teacher's phone): the newest picture only, under cam/<key> */
     camFrame: (key, v) => set(() => L("cam/" + key), v, "sending the picture"),
     getCam: key => boot() ? L("cam/" + key).once("value").then(s => s.val()).catch(() => null) : Promise.resolve(null),
+    /* direct video (WebRTC) from the phone to the teacher's laptop: only the handshake goes through here,
+       under rtc/<key> — phone (the live phone), req/<viewer>, off/<viewer> (phone's offer), ans/<viewer> */
+    rtcSet: (key, path, v) => set(() => L("rtc/" + key + (path ? "/" + path : "")), v, "linking the video"),
+    rtcWatch(key, path, fn) {
+      if (!boot()) return () => {};
+      const r = L("rtc/" + key + "/" + path), cb = s => fn(s.val());
+      try { r.on("value", cb); } catch (e) { return () => {}; }
+      return () => { try { r.off("value", cb); } catch (e) {} };
+    },
+    rtcOnLeave(key, path, on) { if (!boot()) return; try { const d = L("rtc/" + key + "/" + path).onDisconnect(); (on ? d.remove() : d.cancel()).catch(() => {}); } catch (e) {} },
 
     /* state */
     watchState: fn => on(() => L("state"), fn, {}),
@@ -142,7 +152,7 @@
     startSession(keep) {
       if (!boot()) return Promise.resolve(false);
       const now = LS.now();
-      return Promise.all(["pairs", "questions", "suggestions", "nudges", "feedback", "votes", "meter", "events", "presence", "cam"].map(k => L(k).remove()))
+      return Promise.all(["pairs", "questions", "suggestions", "nudges", "feedback", "votes", "meter", "events", "presence", "cam", "rtc"].map(k => L(k).remove()))
         .then(() => L("state").set(clean(Object.assign({ screen: 1, live: true, reset: now, startedAt: null, screenAt: now, timerEnd: null, pausedLeft: null, reveal: {}, photos: null, ruleVote: null, classRule: null, spot: null }, keep || {}))))
         .then(() => { LS.logEvent("session", {}); return true; }).catch(e => { fail("starting the session", e); return false; });
     },

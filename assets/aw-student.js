@@ -250,11 +250,11 @@
     });
     return box;
   }
-  function frameInputs(n, key, parts, count) {
+  function frameInputs(n, key, parts, count, ph) {
     const a = A(n); a[key] = a[key] || [];
     const w = el("div", "frame");
     let h = "";
-    for (let i = 0; i < count; i++) h += '<span>' + esc(parts[i] || "") + '</span><input data-i="' + i + '" value="' + esc(a[key][i] || "") + '">';
+    for (let i = 0; i < count; i++) h += (parts[i] ? '<span>' + esc(parts[i]) + '</span>' : '') + '<input data-i="' + i + '" value="' + esc(a[key][i] || "") + '"' + (ph && ph[i] ? ' placeholder="' + esc(ph[i]) + '"' : '') + '>';
     if (parts.length > count) h += '<span>' + esc(parts[count]) + '</span>';
     w.innerHTML = h;
     w.querySelectorAll("input").forEach(inp => inp.oninput = () => { a[key][+inp.dataset.i] = inp.value; saveAns(n); });
@@ -306,7 +306,7 @@
         h += '<button class="mday" disabled><i>Day ' + i + '</i><span>–</span></button>'; continue;
       }
       const c = CAT(d.a.aqi), looked = !!(d.g && d.g.guess), right = c && looked && d.g.guess === c.k;
-      h += '<button class="mday" data-code="' + esc(code) + '" data-day="' + i + '"' + (looked ? '' : ' title="Catch-up day: copied from the station record, no guess"') + '><i>Day ' + i + '</i><span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + d.a.aqi + '</span><em>' + (!looked ? "copied" : right ? "eyes ✓" : "eyes ✗") + '</em></button>';
+      h += '<button class="mday" data-code="' + esc(code) + '" data-day="' + i + '"' + (looked ? '' : ' data-copied="1" title="Catch-up day: copied from the station record, no guess"') + '><i>Day ' + i + '</i><span class="aqi" style="background:' + c.col + ';color:' + c.ink + '">' + d.a.aqi + '</span><em>' + (!looked ? "copied" : right ? "eyes ✓" : "eyes ✗") + '</em></button>';
     }
     return h + '</div>' + (filled ? '<p class="vn filledn">Grey days: not logged, or the number did not match the station — the number shown is the station’s (≈ = estimate). No ✓ or ✗.</p>' : '');
   }
@@ -323,11 +323,24 @@
       const t = el("div", "task", '<h3>1 · Tap your worst day (the highest number).</h3><p class="vn" id="worstTxt"></p><h3>2 · Were your eyes right on that day?</h3>');
       box.appendChild(t);
       const paintW = () => { const x = a.worst; $("#worstTxt").textContent = x ? ("You chose " + (P.names[P.codes.indexOf(x.code)] || "") + ", Day " + x.day + ".") : "Tap a day above."; box.querySelectorAll(".mday").forEach(b => b.classList.toggle("on", !!x && b.dataset.code === x.code && +b.dataset.day === x.day)); };
-      bindWeek = () => box.querySelectorAll(".mday[data-day]").forEach(b => b.onclick = () => { a.worst = { code: b.dataset.code, day: +b.dataset.day }; saveAns(n); paintW(); });
+      /* a copied (catch-up) day has no guess: nobody looked at the sky, so the answer is No */
+      const eyesBox = el("div"), eyesNote = el("p", "vn eyesnote");
+      const paintEyes = () => {
+        eyesBox.innerHTML = "";
+        eyesBox.appendChild(chips([["yes", "Yes"], ["no", "No"]], a.eyes, k => { a.eyes = k; a.eyesAuto = false; saveAns(n); eyesNote.textContent = ""; }));
+        eyesNote.textContent = a.eyesAuto ? "You copied this day from the station record — nobody looked at the sky that day, so the answer is No." : "";
+      };
+      const copiedDay = x => { const b = x && box.querySelector('.mday[data-code="' + x.code + '"][data-day="' + x.day + '"]'); return !!(b && b.dataset.copied === "1"); };
+      const eyesDefault = tapped => {
+        if (copiedDay(a.worst)) { if (tapped || a.eyes == null) { a.eyes = "no"; a.eyesAuto = true; saveAns(n); } }
+        else if (a.eyesAuto) { a.eyes = null; a.eyesAuto = false; saveAns(n); }
+        paintEyes();
+      };
+      bindWeek = () => box.querySelectorAll(".mday[data-day]").forEach(b => b.onclick = () => { a.worst = { code: b.dataset.code, day: +b.dataset.day }; saveAns(n); paintW(); eyesDefault(true); });
       repaintWeek = () => { box.querySelectorAll(".wk[data-code]").forEach(wk => { wk.innerHTML = weekStrip(wk.dataset.code); }); bindWeek(); paintW(); };
       bindWeek();
-      t.appendChild(chips([["yes", "Yes"], ["no", "No"]], a.eyes, k => { a.eyes = k; saveAns(n); }));
-      paintW();
+      t.appendChild(eyesBox); t.appendChild(eyesNote);
+      paintW(); eyesDefault(false);
       const v = el("div", "task", '<h3>3 · ' + esc(D.vote.q) + '</h3><p class="vn">' + esc(D.vote.vn) + '</p>');
       v.appendChild(chips(D.vote.opts, a.pre, k => { a.pre = k; saveAns(n, true); }));
       v.appendChild(el("label", "", "How sure are you?"));
@@ -375,10 +388,11 @@
       box.appendChild(p);
       box.appendChild(el("div", "task", '<h3>Observe</h3><div id="meter" class="meter"></div>'));
       box.appendChild(el("div", "", '<div id="sizeCard"></div>'));
-      const ex = el("div", "task", '<h3>Explain</h3>');
-      ex.appendChild(frameInputs(n, "ex", D.jar.frame, 3));
+      const ex = el("div", "task", '<h3>Explain: what is the evidence?</h3><p class="vn">Use the meter’s number when the jar looks clear (or what the beam of light showed).</p>');
+      const fr = frameInputs(n, "ex", D.jar.frame, 3, D.jar.ph); fr.id = "exFrame";
+      ex.appendChild(fr);
       box.appendChild(ex);
-      const bk = el("div", "task", bookBox(D.jar.bookQ3.page, D.jar.bookQ3.text, '<p class="vn">Write one sentence in your book. Use the beam or the number as your evidence.</p>'));
+      const bk = el("div", "task", bookBox(D.jar.bookQ3.page, D.jar.bookQ3.text, '<p class="vn">' + esc(D.jar.bookHint) + '</p>'));
       bk.appendChild(tick(n, "book", "We wrote it in our books"));
       box.appendChild(bk);
       paintMeter();
@@ -400,10 +414,11 @@
       const rl = el("div", "task", '<h3>Write the rule</h3><p class="vn">The fog and the jar smoke looked the same. Which one is a pollutant — and why?</p>');
       rl.appendChild(frameInputs(n, "rule", D.focus.rule, 2));
       box.appendChild(rl);
-      const tm = el("div", "task", '<h3>Six words (book page 30)</h3><p class="vn">The Navigator says each word; the Pilot repeats it.</p><div class="terms" id="terms"></div>');
+      const tm = el("div", "task", '<h3>Six words (book page 30)</h3><p class="vn">The Navigator says each word; the Pilot repeats it. Look at each picture: what does it show?</p><div class="terms pics" id="terms"></div>');
       box.appendChild(tm);
       D.focus.terms.forEach(t => {
-        const r = el("div", "trow", '<button class="say" type="button" aria-label="Hear it">🔊</button><b>' + esc(t.en) + '</b><span class="ipa">' + esc(t.ipa) + '</span><span class="vn">' + esc(t.vn) + '</span>');
+        const ic = (window.AW_ICONS || {})[t.ic] || "";
+        const r = el("div", "tcard", (ic ? '<span class="tico">' + ic + '</span>' : '') + '<span class="ttx"><b>' + esc(t.en) + '</b><span class="ipa">' + esc(t.ipa) + '</span><span class="vn">' + esc(t.vn) + '</span></span><button class="say" type="button" aria-label="Hear it">🔊</button>');
         r.querySelector(".say").onclick = () => U.speak(t.en.replace("(PM2.5)", "P M two point five").replace("AQI", "A Q I"));
         tm.querySelector("#terms").appendChild(r);
       });
@@ -708,6 +723,9 @@
     const m = $("#meter"); if (!m) return;
     const v = k => (METER[k] != null && METER[k] !== "") ? METER[k] : "–";
     m.innerHTML = '<div><span>Room air</span><b>' + v("base") + '</b></div><div><span>Smoke at the meter</span><b>' + v("peak") + '</b></div><div><span>60 s later — looks clear</span><b>' + v("after") + '</b></div><p class="vn">PM2.5 in micrograms per cubic metre (µg/m³)</p>';
+    /* the frame's hint uses the class's own number: the one when the jar looks clear */
+    const num = v("after") !== "–" ? v("after") : v("peak") !== "–" ? v("peak") : null, i2 = $('#exFrame input[data-i="1"]');
+    if (i2) i2.placeholder = num != null ? "the number, e.g. " + num + " µg/m³ of PM2.5" : D.jar.ph[1];
   }
   function paint4() {
     const a = A(4); const rev = ST.reveal && ST.reveal.q1q2;

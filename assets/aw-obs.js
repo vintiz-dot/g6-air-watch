@@ -160,7 +160,7 @@
     tx.textContent = !LS.available() ? "No database connection" : connected === false ? "Reconnecting…" : "Live · read-only";
   }
   /* the live camera (the teacher's phone), above everything while the teacher shows it */
-  if (window.AWCAM) { const cb = el("div"); cb.id = "ocam"; $("#shell").insertBefore(cb, $("#app")); AWCAM.mount({ el: cb, kind: "obs" }); }
+  if (window.AWCAM) { const cb = el("div"); cb.id = "ocam"; $("#shell").insertBefore(cb, $("#app")); AWCAM.mount({ el: cb, kind: "obs", direct: true }); }
   buildTalk(); paintMap(); paintPairs(); paintFeed(); paintGoals(); paintRub(); paintChecks(); paintAbout(); tick();
   setInterval(() => { later("map", paintMap, 50); later("pairs", paintPairs, 50); later("rub", paintRub, 50); later("goals", paintGoals, 60); }, 5000);
   LS.watchConnected(v => { connected = v; paintLive(); });

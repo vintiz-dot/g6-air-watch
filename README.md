@@ -320,16 +320,24 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   scan the QR code with the phone’s camera (iPhone: it opens in Safari; Android: Chrome) → **Turn on the
   camera** → allow it. Stand the phone sideways where it sees the jar **and** the meter’s number, plugged
   in if you can, then press **● Start: live + record**. Only your laptop’s preview shows it for now.
+- **Smooth video on the projector:** connect your laptop to the **phone’s hotspot** (iPhone: Settings →
+  Personal Hotspot → Allow Others to Join; Android: Settings → Hotspot & tethering) before you open the
+  camera. The phone then sends real video straight to your laptop — the projector and your preview show
+  **LIVE · VIDEO**, and the box on your page says **direct video ✓**. Your laptop’s internet goes through
+  the phone for the lesson (the lesson itself uses very little). If it says *pictures only*, the direct
+  link did not connect: everything still works, with pictures.
 - **Show it:** on screen 3, **Tab** → *Show the live camera on every screen* (or the **Show on every
-  screen** button). The projector, every laptop and the observers’ page show it about 1 second behind, about
-  3 pictures a second (pictures, not smooth video — it works on the school Wi-Fi with nothing to install).
-  Students can tap it to make it bigger. The meter numbers you type are shown on it.
+  screen** button). The projector shows the direct video; the laptops (and the observers, unless their
+  laptop is also on the hotspot) get about 4 pictures a second, about 1 second behind. Students can tap it
+  to make it bigger. The meter numbers you type are shown on it.
 - **Hide it:** the size picture (Tab), **Hide from the screens**, or moving to another screen.
 - **Stop on the phone** at the end → **Save the video** (iPhone: *Save Video* puts it in Photos; Android:
   it goes to Downloads). The video is only on that page until you save it — keep the page open and the
   phone unlocked while it records.
-- It uses about 0.7 Mbps of Wi-Fi per screen while shown (about 10 Mbps for the class) and almost nothing
-  when hidden. If the Wi-Fi is slow the screens get fewer pictures, never old ones. The phone can use 4G.
+- The pictures use about 1 Mbps of the school internet per laptop while shown (about 12 Mbps for the class)
+  and almost nothing when hidden. If the Wi-Fi is slow a laptop gets fewer pictures, never old ones. As a
+  hotspot, the phone sends them over its mobile data (about 1 Mbps); the direct video to your laptop uses no
+  data.
 - The link stays the same when you start a new session. If the phone ever says the link is old, scan the
   QR code again.
 

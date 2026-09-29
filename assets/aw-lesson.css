@@ -647,3 +647,27 @@ body.camphone #shell{max-width:720px}
 .savebox{border:2px solid var(--green);background:var(--okBg);color:var(--okInk);border-radius:12px;padding:10px 12px;margin-top:10px}
 .savebox .vn{margin:4px 0 0}
 #recTag{background:#CC4B37;color:#fff;border-radius:999px;padding:3px 10px;font-weight:800;font-size:12px;animation:pulse 1.6s ease-in-out infinite}
+/* ── 29 Sept: six words with pictures (screen 4), the eyes note (screen 1), the sort chart after the answers ── */
+.terms.pics{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.tcard{display:grid;grid-template-columns:72px 1fr auto;gap:12px;align-items:center;border:1.5px solid var(--line);border-radius:12px;padding:8px;background:var(--card)}
+.tcard .tico{width:72px;height:72px;display:block}
+.tcard .tico svg{width:100%;height:100%;display:block}
+.tcard .ttx{display:flex;flex-direction:column;gap:1px;min-width:0}
+.tcard .ttx b{font-size:17px;line-height:1.2}
+.tcard .ipa{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--muted)}
+.tcard .vn{font-size:13px}
+.eyesnote{margin:6px 0 0;color:var(--warnInk);background:var(--warnBg);border-radius:8px;padding:6px 10px}
+.eyesnote:empty{display:none}
+.pbar.right .t i{background:var(--green)}
+.pbar .l small.isp,.pbar .l small.notp{font-size:.75em;font-weight:700;border-radius:999px;padding:.05em .55em;white-space:nowrap}
+.pbar .l small.isp{background:var(--badBg);color:var(--badInk)}
+.pbar .l small.notp{background:var(--soft);color:var(--muted)}
+/* the live camera: direct video (WebRTC) where it connects, pictures otherwise */
+.cvpic video{display:none;max-width:100%;max-height:100%;object-fit:contain;background:#000}
+.camview.direct .cvpic video{display:block}
+.camview.direct .cvpic img,.camview.direct .cvwait{display:none}
+#pcam .cvpic video{width:100%;height:100%}
+#ocam .cvpic video{max-height:46vh}
+.cv-preview .cvpic video{max-height:170px}
+.camview.direct .cvlive::after{content:" · VIDEO"}
+.camtip{margin:6px 0 0;font-size:12.5px;line-height:1.4}

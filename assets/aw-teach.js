@@ -11,7 +11,7 @@
   let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, METER = {}, EVENTS = {}, HOMEWORK = {}, HWCFG = {}, FLAGS = {}, PRES = {};
   let connected = null, builtFor = null, sessMode = null, projWin = null;
   const TID = Math.random().toString(36).slice(2);
-  const CAM = { live: false, frame: null }; let camDet = null, camLink = "", camBtnKey = "";
+  const CAM = { live: false, direct: false, frame: null }; let camDet = null, camLink = "", camBtnKey = "";
   let BC = null; try { BC = new BroadcastChannel("aw_remote"); } catch (e) { BC = null; }
   let LOC = {}; try { LOC = JSON.parse(localStorage.getItem("aw_teach_local") || "{}") || {}; } catch (e) { LOC = {}; }
   const saveLoc = () => { try { localStorage.setItem("aw_teach_local", JSON.stringify(LOC)); } catch (e) {} };
@@ -379,7 +379,7 @@
     8: [["rev", "q3"], ["spot", 1]],
     9: [["rev", "shift"], ["rev", "goals"], ["wall"], ["spot", 1]]
   };
-  const SPOTWHY = { 2: "a question to investigate", 3: "explains with the meter number", 4: "names harm and amount", 5: "says what the AQI shows and hides",
+  const SPOTWHY = { 2: "a question to investigate", 3: "names the evidence: the meter’s number or the beam", 4: "names harm and amount", 5: "says what the AQI shows and hides",
     6: "a number with its source", 7: "no place name — true for any city", 8: "a reason in every part", 9: "a sharper question for E12" };
   const NOSHOW = { 1: "Nothing to show on this screen — silent start. The class vote stays hidden until screen 9." };
   const marks = n => { const q = SEQ[n] || [], has = k => q.some(x => x[0] === k);
@@ -575,10 +575,11 @@
       '<div class="phoneqr camqr"><div class="qr"></div><div class="qrhow"><ol>' +
       '<li>Scan the square with your phone’s camera and open the link.</li>' +
       '<li><b>Turn on the camera</b>, aim at the jar and the meter, press <b>Start</b> — it records a video on the phone too.</li>' +
-      '<li><b>Tab</b> or <b>Show on every screen</b>: projector, laptops and observers.</li></ol><p class="vn qrurl"></p></div></div>' +
+      '<li><b>Tab</b> or <b>Show on every screen</b>: projector, laptops and observers.</li></ol>' +
+      '<p class="vn camtip"><b>Smooth video on the projector:</b> connect this laptop to the phone’s hotspot. It says “direct video ✓” here when it works; if not, the screens still get pictures.</p><p class="vn qrurl"></p></div></div>' +
       '<div class="campv"></div><div class="btns cambtns"></div>';
-    AWCAM.mount({ el: camDet.querySelector(".campv"), kind: "preview", title: "Preview — only you see this",
-      onStatus: st => { const was = CAM.live; CAM.live = st.live; CAM.frame = st.frame; paintCamSt(); if (was !== st.live) { later("show", paintShow, 50); later("sess", paintSessionDyn, 100); } } });
+    AWCAM.mount({ el: camDet.querySelector(".campv"), kind: "preview", title: "Preview — only you see this", direct: true,
+      onStatus: st => { const was = CAM.live; CAM.live = st.live; CAM.direct = st.direct; CAM.frame = st.frame; paintCamSt(); if (was !== st.live) { later("show", paintShow, 50); later("sess", paintSessionDyn, 100); } } });
     return camDet;
   }
   function paintCam() {
@@ -603,7 +604,8 @@
   function paintCamSt() {
     if (!camDet) return;
     const s = camDet.querySelector(".camst"), f = CAM.frame;
-    s.textContent = ST.camOn ? (CAM.live ? "on every screen" : "on the screens — waiting for the phone") : CAM.live ? "phone live · only you see it" + (f && f.fps ? " · " + f.fps + "/s" : "") : "phone not live";
+    const how = CAM.direct ? " · direct video ✓" : CAM.live ? " · pictures only" : "";
+    s.textContent = (ST.camOn ? (CAM.live ? "on every screen" : "on the screens — waiting for the phone") : CAM.live ? "phone live · only you see it" : "phone not live") + how;
     s.className = "camst" + (ST.camOn ? " on" : CAM.live ? " ok" : "");
   }
   function paintSpotCtl() {

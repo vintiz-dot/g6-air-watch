@@ -81,7 +81,7 @@
     vals = arr(vals); if (!nFilled(vals)) return "";
     let s = ""; for (let i = 0; i < count; i++) s += (parts[i] || "") + " " + (t(vals[i]) || "…") + " ";
     if (parts.length > count) s += parts[count];
-    return t(s.replace(/\s+/g, " "));
+    return t(s.replace(/\s+/g, " ").replace(/\s+([,.:;!?])/g, "$1").replace(/([,.:;])\1+/g, "$1"));
   }
   function summary(n, p, ctx) {
     ctx = ctx || {};
@@ -187,27 +187,24 @@
   const noPlace = x => !/ha\s*noi|hà\s*nội/i.test(x || "");
   const allOf = (vals, need) => { const done = vals.filter(x => x !== null); if (!done.length) return null; return done.length === vals.length && vals.filter(Boolean).length >= need; };
   const GC = [
-    { id: "s3",  g: "sci",   n: 3, label: "Jar Test: explained with the number, not the look", test: a => nFilled(a.ex) ? (nFilled(a.ex) >= 2 && hasDigit(a.ex)) : null },
+    { id: "s3",  g: "sci",   n: 3, label: "Jar Test: named the evidence — the meter’s number or the beam", test: a => nFilled(a.ex) ? (nFilled(a.ex) >= 2 && (hasDigit(a.ex) || /beam|light|dust|particle/i.test(arr(a.ex).join(" ")))) : null },
     { id: "s4a", g: "sci",   n: 4, label: "Pollutant or not: 7–8 of 8 cards right", test: a => allOf(D.focus.cards.map(cd => MARK.sort(a, cd)), 7) },
     { id: "s4b", g: "sci",   n: 4, label: "Book Q2 (p.32): 3–4 of 4 right", test: a => allOf(D.focus.q2.key.map((k, i) => MARK.q2(a, i)), 3) },
     { id: "s5",  g: "sci",   n: 5, label: "The AQI is the biggest of the six parts", test: MARK.hyp },
     { id: "s6",  g: "sci",   n: 6, label: "DBQ2 (p.34): A", test: MARK.dbq2 },
     { id: "l4a", g: "lang",  n: 4, label: "Key words: book Q1 matched 4 of 4", test: a => allOf(D.focus.q1.key.map((k, i) => MARK.q1(a, i)), 4) },
     { id: "l4b", g: "lang",  n: 4, label: "Grammar: “The AQI tells us…”", test: MARK.map },
-    { id: "l5",  g: "lang",  n: 5, label: "“The AQI shows ___, but it hides ___.”", test: a => nFilled(a.fr) ? nFilled(a.fr) >= 2 : null },
+    { id: "l5",  g: "think", n: 5, label: "“The AQI shows ___, but it hides ___.” — both parts", test: a => nFilled(a.fr) ? nFilled(a.fr) >= 2 : null },
     { id: "l6",  g: "lang",  n: 6, label: "“___ tells us that the AQI was ___” with a number", test: a => nFilled(a.tw2) > 1 ? (nFilled(a.tw2) >= 3 && hasDigit(arr(a.tw2).slice(1))) : null },
     { id: "l8",  g: "lang",  n: 8, label: "“If the city did D, it would miss ___” — both sentences", test: a => (nFilled(a.fD) || nFilled(a.fE)) ? (nFilled(a.fD) >= 1 && nFilled(a.fE) >= 1) : null },
-    { id: "t2",  g: "think", n: 2, label: "Asked a question to investigate", test: a => a.qPosted ? true : (t(a.q) ? false : null) },
-    { id: "t5",  g: "think", n: 5, label: "Time or place: decided with evidence", test: a => { const tm = a.time || {}, pl = a.place || {}; if (!tm.yn && !pl.yn) return null; return !!(tm.yn && pl.yn && (t(tm.ev) || t(pl.ev))); } },
-    { id: "t6",  g: "think", n: 6, label: "DBQ1 (p.33): one cause and one effect", test: a => { const x = MARK.dbq1(a); return x === null ? null : (x && MARK.dbq1roles(a) === true); } },
-    { id: "t7",  g: "think", n: 7, label: "A rule for any city (no place name)", test: a => a.submitted ? (!!t(a.rule) && noPlace(a.rule)) : (a.frame ? false : null) },
-    { id: "t8a", g: "think", n: 8, label: "Q3 (p.32): A, B and C", test: MARK.q3 },
-    { id: "t8b", g: "think", n: 8, label: "A fair plan: where, when, how often, compared with what — each with a reason", test: a => { const k = Object.values(a.plan || {}).filter(x => t(x)).length; return k ? (k >= 4 && reasons(a) >= 4) : null; } }
+    /* thinking goal: "I can explain what an index hides as well as what it shows." */
+    { id: "t5",  g: "think", n: 5, label: "Time or place: what one number hides — decided with evidence", test: a => { const tm = a.time || {}, pl = a.place || {}; if (!tm.yn && !pl.yn) return null; return !!(tm.yn && pl.yn && (t(tm.ev) || t(pl.ev))); } },
+    { id: "t7",  g: "think", n: 7, label: "A rule for any city (no place name)", test: a => a.submitted ? (!!t(a.rule) && noPlace(a.rule)) : (a.frame ? false : null) }
   ];
   /* key words that suggest a goal was recalled (teacher hint only) */
   const KW = {
     sci: ["clear", "clean", "pollut", "aqi", "made of", "pm", "part", "look", "air"],
-    think: ["evidence", "test", "fair", "plan", "measure", "where", "when", "often", "compar", "prove", "number"]
+    think: ["index", "hide", "show", "number", "aqi", "six", "part"]
   };
   function keyHits(text, k) { const s = String(text || "").toLowerCase(); return (KW[k] || []).filter(w => s.includes(w)).length; }
   function keyHint(text, k) { return t(text) ? (keyHits(text, k) >= 2 ? " (key words ✓)" : " (few key words)") : ""; }

@@ -12,10 +12,10 @@ window.LESSON = {
     { k: "lang",  label: "Language goal", short: "Language",
       text: "I can use the key words (pollutant, emission, PM2.5, AQI) and report a number with its source: “___ tells us that ___.”" },
     { k: "think", label: "Thinking goal", short: "Thinking",
-      text: "I can use evidence to test an idea, and plan a fair way to measure: where, when, how often, compared with what." }
+      text: "I can explain what an index hides as well as what it shows." }
   ],
   /* which goals each screen works on (shown on every laptop) */
-  screenGoals: { 1: ["think"], 2: ["think"], 3: ["sci", "lang"], 4: ["sci", "lang"], 5: ["sci", "lang", "think"], 6: ["sci", "lang", "think"], 7: ["think"], 8: ["think", "lang"], 9: ["sci", "lang", "think"] },
+  screenGoals: { 1: ["sci"], 2: ["sci"], 3: ["sci", "lang"], 4: ["sci", "lang"], 5: ["sci", "lang", "think"], 6: ["sci", "lang", "think"], 7: ["think"], 8: ["lang"], 9: ["sci", "lang", "think"] },
 
   /* 9 screens · minutes add up to 44 + 1 minute to close = 45 */
   screens: [
@@ -64,7 +64,10 @@ window.LESSON = {
   jar: {
     predict1: { q: "When the smoke clears, will the air in the jar be clean?", opts: [["yes", "Yes, clean"], ["no", "No, not clean"], ["cant", "Can't tell"]] },
     predict2: { q: "How high will the PM2.5 number go?", opts: [["low", "Low (under 50)"], ["mid", "Middle (50–150)"], ["high", "High (over 150)"]] },
-    frame: ["It looks", "but the meter shows", "so"],
+    /* the frame answers the book question: "What evidence is there to prove air pollution?" */
+    frame: ["The evidence is the", ", which showed", "even though the air looked", "."],
+    ph: ["meter / beam of light", "the number, e.g. 64 µg/m³ of PM2.5", "clean / clear"],
+    bookHint: "Your sentence answers this question — copy it into your book.",
     bookQ3: { page: 32, text: "3. What evidence is there to prove air pollution?" },
     /* shown after the teacher's reveal, once the jar looks clear again */
     size: { title: "Why can’t we see it? How small is PM2.5?", img: "assets/img/pm25-size.webp",
@@ -87,12 +90,12 @@ window.LESSON = {
     ],
     rule: ["A pollutant is a substance that", "when there is enough of it. You cannot always", "it."],
     terms: [
-      { en: "Air pollution", ipa: "/eər pəˈluː.ʃən/", vn: "Ô nhiễm không khí" },
-      { en: "Air quality", ipa: "/eər ˈkwɒl.ə.ti/", vn: "Chất lượng không khí" },
-      { en: "Fine dust (PM2.5)", ipa: "/faɪn dʌst/", vn: "Bụi mịn (PM2.5)" },
-      { en: "AQI (Air Quality Index)", ipa: "/eɪ.kjuː.ˈaɪ/", vn: "Chỉ số chất lượng không khí" },
-      { en: "Pollutant", ipa: "/pəˈluː.tənt/", vn: "Chất gây ô nhiễm" },
-      { en: "Emission", ipa: "/ɪˈmɪʃ.ən/", vn: "Khí thải" }
+      { en: "Air pollution", ipa: "/eər pəˈluː.ʃən/", vn: "Ô nhiễm không khí", ic: "pollution" },
+      { en: "Air quality", ipa: "/eər ˈkwɒl.ə.ti/", vn: "Chất lượng không khí", ic: "quality" },
+      { en: "Fine dust (PM2.5)", ipa: "/faɪn dʌst/", vn: "Bụi mịn (PM2.5)", ic: "pm25" },
+      { en: "AQI (Air Quality Index)", ipa: "/eɪ.kjuː.ˈaɪ/", vn: "Chỉ số chất lượng không khí", ic: "aqi" },
+      { en: "Pollutant", ipa: "/pəˈluː.tənt/", vn: "Chất gây ô nhiễm", ic: "pollutant" },
+      { en: "Emission", ipa: "/ɪˈmɪʃ.ən/", vn: "Khí thải", ic: "emission" }
     ],
     q1: { page: 32, head: "1. (DOK1) Match the term with its definition:",
       terms: ["1. AQI", "2. Emission", "3. Pollutant", "4. PM2.5"],

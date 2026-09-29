@@ -131,12 +131,16 @@
       return () => {
         const L = pairsL(), rs = rev("sort");
         let any = 0;
+        /* before the answers: how the class split. After: how many pairs sorted each card RIGHT
+           (a full bar for "oxygen" means everyone knew it is not a pollutant) */
         $("#srt").innerHTML = '<div class="pbars wide sm">' + D.focus.cards.map(cd => {
           const vals = L.map(p => (((p.a || {}).s4 || {}).sort || {})[cd.k]).filter(Boolean);
           any = Math.max(any, vals.length);
           const y = U.pct(vals.filter(x => x === "yes").length, Math.max(1, vals.length));
-          return '<div class="pbar' + (rs && cd.yes ? " key" : "") + '"><span class="l">' + esc(cd.en) + (rs && !cd.yes ? ' <small style="color:var(--muted)">(not)</small>' : '') + '</span><span class="t"><i style="width:' + y + '%"></i></span><span class="v">' + y + '%</span></div>';
-        }).join("") + '</div><p class="pnote" style="margin:.3em 0 0">Bar = % of pairs who said “pollutant”.' + (rs ? " ✓ = it is a pollutant." : "") + '</p>';
+          const r = U.pct(vals.filter(x => x === (cd.yes ? "yes" : "no")).length, Math.max(1, vals.length));
+          if (!rs) return '<div class="pbar"><span class="l">' + esc(cd.en) + '</span><span class="t"><i style="width:' + y + '%"></i></span><span class="v">' + y + '%</span></div>';
+          return '<div class="pbar right"><span class="l">' + esc(cd.en) + ' <small class="' + (cd.yes ? "isp" : "notp") + '">' + (cd.yes ? "pollutant" : "not a pollutant") + '</small></span><span class="t"><i style="width:' + r + '%"></i></span><span class="v">' + r + '%</span></div>';
+        }).join("") + '</div><p class="pnote" style="margin:.3em 0 0">' + (rs ? "Bar = % of pairs who sorted it right." : "Bar = % of pairs who said “pollutant”.") + '</p>';
         $("#sn").textContent = any + " pairs sorting";
         const n2 = answered(4, a => E.arr(a.q2).filter(Boolean).length >= 4);
         $("#qn").textContent = n2 + " of " + L.length + " pairs answered";
@@ -335,7 +339,7 @@
   const all = () => { document.body.classList.toggle("blank", !!ST.blank); paintTop(); paintStage(); paintBot(); paintSpot(); fitCam(); };
   /* the live camera from the teacher's phone: over the stage, between the top bar and the bottom line */
   const camEl = document.createElement("div"); camEl.id = "pcam"; document.body.appendChild(camEl);
-  if (window.AWCAM) AWCAM.mount({ el: camEl, kind: "proj" });
+  if (window.AWCAM) AWCAM.mount({ el: camEl, kind: "proj", direct: true });
   function fitCam() { const t = $("#ptop"), b = $("#pbot"); camEl.style.top = (t ? t.offsetHeight : 0) + "px"; camEl.style.bottom = (b ? b.offsetHeight : 0) + "px"; }
   window.addEventListener("resize", fitCam);
 

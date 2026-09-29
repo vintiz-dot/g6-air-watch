@@ -1,7 +1,10 @@
 /* Air Watch lesson — the live camera on the teacher's phone (cam.html?k=KEY, opened from the QR code on the
-   teacher's page). While it is live it sends the newest picture from the back camera to the lesson room:
-   about 3 a second while the teacher shows it on the screens, one every 2 seconds otherwise (the teacher's
-   preview). It records a video on the phone at the same time; Stop → Save the video. */
+   teacher's page). While it is live:
+   · direct video (WebRTC) to the teacher's laptop — projector and preview — when the phone and the laptop
+     can reach each other (best: the laptop on the phone's hotspot). Smooth, about 30 frames a second.
+   · pictures to the lesson room for the laptops and the observers (and as a fallback): about 4 a second while
+     the teacher shows it on the screens, one every 2 seconds otherwise.
+   · a video recorded on the phone; Stop → Save the video. */
 (function () {
   "use strict";
   const { U, LS } = window.AWL;
@@ -11,6 +14,8 @@
   let stream = null, live = false, seq = 0, inFlight = 0, lastSent = 0, acks = [], sizes = [];
   let rec = null, chunks = [], recStart = 0, recType = "", clip = null, wake = null, camErr = "", starting = false;
   const canvas = document.createElement("canvas"), cx = canvas.getContext("2d");
+  /* WebP where the browser can make it (smaller for the same quality), JPEG otherwise (iPhone) */
+  const PIC = (() => { try { const c = document.createElement("canvas"); c.width = c.height = 2; return c.toDataURL("image/webp", 0.6).indexOf("data:image/webp") === 0 ? "image/webp" : "image/jpeg"; } catch (e) { return "image/jpeg"; } })();
 
   $("#app").innerHTML =
     '<div class="card" id="cmsg" hidden></div>' +
@@ -76,8 +81,10 @@
     if (!live) { s.textContent = ""; return; }
     const n = Date.now(); acks = acks.filter(x => n - x < 5000);
     const fps = acks.length / 5, kb = sizes.length ? Math.round(sizes.reduce((a, v) => a + v, 0) / sizes.length * 0.75 / 1024) : 0;
+    const dn = directN();
     s.innerHTML = (ST.camOn ? '<b class="on">On every screen now</b>' : '<b>Only your laptop sees it</b> — press Tab there (or “Show on every screen”)') +
-      ' · ' + fps.toFixed(1) + ' pictures a second' + (kb ? ' · ' + kb + ' KB each' : '') + (rec ? ' · <b class="rec">● REC ' + mmss(Math.round((n - recStart) / 1000)) + '</b>' : '');
+      '<br>' + (dn ? '<b class="on">Direct video to your laptop ✓</b>' + (dn > 1 ? " (" + dn + " screens)" : "") : '<span>Direct video: not connected — put your laptop on this phone’s hotspot</span>') +
+      ' · pictures for the laptops: ' + fps.toFixed(1) + ' a second' + (kb ? ' · ' + kb + ' KB each' : '') + (rec ? ' · <b class="rec">● REC ' + mmss(Math.round((n - recStart) / 1000)) + '</b>' : '');
   }
   function paintSave() {
     const box = $("#csave"); box.innerHTML = "";
@@ -115,24 +122,24 @@
   function start() {
     if (!stream || live) return;
     live = true; acks = []; sizes = []; inFlight = 0; lastSent = 0; clip = null;
-    startRec(); keepAwake(true); paint();
+    startRec(); keepAwake(true); rtcStart(); paint();
   }
   function stop() {
     if (!live) return;
-    live = false; keepAwake(false);
+    live = false; keepAwake(false); rtcStop();
     if (rec) { const r = rec; try { r.stop(); } catch (e) { rec = null; } }
     LS.camFrame(key, { stopped: true, at: LS.now(), seq: ++seq });
     paint();
   }
-  /* the newest picture: small (640 px), at most two on the way, so a slow Wi-Fi only lowers the rate */
+  /* the newest picture (720 px), at most two on the way, so a slow Wi-Fi only lowers the rate */
   function pump() {
     if (!live || !video.videoWidth) return;
-    const t = Date.now(), every = ST.camOn ? 330 : 2000;
+    const t = Date.now(), every = ST.camOn ? 250 : 2000;
     if (inFlight >= 2 || t - lastSent < every) return;
-    const vw = video.videoWidth, vh = video.videoHeight, sc = Math.min(1, 640 / Math.max(vw, vh));
+    const vw = video.videoWidth, vh = video.videoHeight, sc = Math.min(1, 720 / Math.max(vw, vh));
     canvas.width = Math.round(vw * sc); canvas.height = Math.round(vh * sc);
     let f = null;
-    try { cx.drawImage(video, 0, 0, canvas.width, canvas.height); f = canvas.toDataURL("image/jpeg", 0.55); } catch (e) { return; }
+    try { cx.drawImage(video, 0, 0, canvas.width, canvas.height); f = canvas.toDataURL(PIC, PIC === "image/webp" ? 0.6 : 0.62); } catch (e) { return; }
     lastSent = t; inFlight++; seq++;
     const n = Date.now(); acks = acks.filter(x => n - x < 5000);
     LS.camFrame(key, { f, at: LS.now(), seq, w: canvas.width, h: canvas.height, rec: !!rec, fps: Math.round(acks.length / 5 * 10) / 10 }).then(ok => {
@@ -142,6 +149,65 @@
   }
   setInterval(pump, 60);
   setInterval(() => { if (live) paintStat(); }, 1000);
+
+  /* ───────── direct video (WebRTC) to the teacher's laptop ─────────
+     The laptop (projector window, preview) asks under rtc/<key>/req; the phone answers each with its own
+     connection (at most 4). Only the handshake goes through the database; the video goes phone → laptop. */
+  const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+  let phoneId = null, peers = {}, unReq = null;
+  function rtcStart() {
+    if (!window.RTCPeerConnection || !stream || phoneId) return;
+    phoneId = Math.random().toString(36).slice(2, 10);
+    LS.rtcOnLeave(key, "phone", true);
+    LS.rtcSet(key, "phone", { id: phoneId, at: LS.now() });
+    unReq = LS.rtcWatch(key, "req", reqs => {
+      reqs = reqs || {};
+      /* a request that went away: drop it unless the video is already flowing (a short internet cut must not stop it) */
+      Object.keys(peers).forEach(vid => { if (!reqs[vid] && peers[vid].pc.connectionState !== "connected") dropPeer(vid); });
+      Object.keys(reqs).forEach(vid => { const r = reqs[vid]; if (live && !peers[vid] && r && r.pid === phoneId && Object.keys(peers).length < 4) makePeer(vid); });
+    });
+  }
+  function rtcStop() {
+    if (unReq) { unReq(); unReq = null; }
+    Object.keys(peers).forEach(dropPeer);
+    if (phoneId) { LS.rtcOnLeave(key, "phone", false); LS.rtcSet(key, "", null); }
+    phoneId = null;
+  }
+  function gathered(pc, ms) {
+    return new Promise(res => {
+      if (pc.iceGatheringState === "complete") return res();
+      const t = setTimeout(res, ms);
+      pc.addEventListener("icegatheringstatechange", () => { if (pc.iceGatheringState === "complete") { clearTimeout(t); res(); } });
+    });
+  }
+  function makePeer(vid) {
+    const pc = new RTCPeerConnection(ICE), p = peers[vid] = { pc, un: null };
+    stream.getVideoTracks().forEach(t => pc.addTrack(t, stream));
+    pc.onconnectionstatechange = () => { if (pc.connectionState === "failed" || pc.connectionState === "closed") dropPeer(vid); paintStat(); };
+    pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => gathered(pc, 2500)).then(() => {
+      if (peers[vid] !== p) return;
+      LS.rtcSet(key, "off/" + vid, { sdp: pc.localDescription.sdp, pid: phoneId, at: LS.now() });
+      p.un = LS.rtcWatch(key, "ans/" + vid, a => {
+        if (!a || !a.sdp || peers[vid] !== p || pc.signalingState !== "have-local-offer") return;
+        pc.setRemoteDescription({ type: "answer", sdp: a.sdp }).then(() => sharp(pc)).catch(() => dropPeer(vid));
+      });
+    }).catch(() => dropPeer(vid));
+  }
+  /* up to 2.5 Mbps: sharp enough to see the smoke and the meter's number */
+  function sharp(pc) {
+    pc.getSenders().forEach(s => {
+      if (!s.track || s.track.kind !== "video" || !s.getParameters) return;
+      try { const pr = s.getParameters(); if (!pr.encodings || !pr.encodings.length) pr.encodings = [{}]; pr.encodings[0].maxBitrate = 2500000; s.setParameters(pr).catch(() => {}); } catch (e) {}
+    });
+  }
+  function dropPeer(vid) {
+    const p = peers[vid]; if (!p) return;
+    delete peers[vid];
+    if (p.un) p.un();
+    try { p.pc.close(); } catch (e) {}
+    LS.rtcSet(key, "off/" + vid, null);
+  }
+  const directN = () => Object.keys(peers).filter(v => peers[v].pc.connectionState === "connected").length;
 
   /* ───────── recording on the phone ───────── */
   function startRec() {

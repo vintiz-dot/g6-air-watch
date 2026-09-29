@@ -235,7 +235,8 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 
 ### Before the bell (from 9:30)
 
-1. Laptops 1–11: open `index.html` and leave them on the join screen. Station cards on the desks.
+1. Laptops 1–11: open `index.html` (or double-click `air-watch-kiosk.bat`, see *Keeping students in the
+   lesson*) and leave them on the join screen. Station cards on the desks.
 2. Laptop 12: open `observer.html` for the observers.
 3. Your laptop: connect the projector and press **Windows + P → Extend**. Open `teacher.html` → PIN →
    **Start a new session**.
@@ -308,6 +309,28 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   set a little smaller so each student fits one half-page.
 - Keys: **Page Down** next · **Page Up** back · **Tab** show the next thing · **B** blank the projector ·
   **P** pause/resume · **+** one more minute · **Esc** end the spotlight. (**B** no longer means back.)
+
+### Keeping students in the lesson
+
+- From the bell to the end, every laptop: asks **“Leave site?”** before the lesson tab closes or reloads
+  (students can still press Leave — no web page can stop a browser closing); goes **full screen** at the
+  first tap or key (Esc gets out, the next tap goes back in, and a banner says so); and tells your page
+  where it is.
+- **Who left:** the pair’s card turns red — *✕ not connected* (tab closed, laptop asleep or Wi-Fi lost),
+  *✕ tab closed*, *↗ other tab or app*, *↗ other window* or *⛶ left full screen* — with how long ago.
+  The Pairs header says **away N (st …)**, and a red message pops up once when a station has been away for
+  5 seconds. The projector never shows it.
+- **Unlock** (session card) switches the full screen and the “Leave site?” check off on every laptop;
+  you still see who leaves. **Lock again** switches them back on.
+- If a tab does close, nothing is lost: reopen `index.html` → **Continue as Station N**.
+- **Kiosk laptops (the strongest lock, optional):** copy `tools/air-watch-kiosk.bat` to each laptop
+  (USB stick or shared drive) and double-click it before the lesson. The lesson opens full screen with no
+  tabs and no address bar — in Chrome, or in Edge if the laptop has no Chrome. Close it at the end with
+  **Alt+F4**. It keeps its own browser profile, so it works even if Chrome is already open; if it is closed
+  by mistake, run it again and press **Continue as Station N**. Windows only; if the site address is different, change the
+  `URL=` line. Without the file: right-click the desktop → **New → Shortcut** → paste
+  `"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --user-data-dir="%LOCALAPPDATA%\AirWatchKiosk" https://vintiz-dot.github.io/g6-air-watch/`
+  (for Edge: `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --kiosk https://vintiz-dot.github.io/g6-air-watch/ --edge-kiosk-type=fullscreen --user-data-dir="%LOCALAPPDATA%\AirWatchKiosk"`).
 
 ### If something goes wrong
 

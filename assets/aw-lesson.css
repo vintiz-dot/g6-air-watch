@@ -579,3 +579,12 @@ body.proj.blank::after{content:"";position:fixed;inset:0;background:#000;z-index
 .pair .acts .btn.sgb{background:var(--amber);color:#1B1200}
 #ttoast{cursor:pointer}
 .barnext.bspot{background:#C8871B;color:#1B1200}
+/* ── staying in the lesson: full screen banner (laptops), who left (teacher), the lock switch ── */
+#stay{position:fixed;top:0;left:0;right:0;z-index:70;pointer-events:none;background:#C8871B;color:#1B1200;text-align:center;font-weight:700;font-size:16px;padding:12px 16px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.pair.away{border-color:var(--crimson);box-shadow:0 0 0 3px var(--badBg)}
+.pair .flag.aw{background:var(--crimson);color:#fff}
+.pair .awline{font-size:12px;font-weight:700;color:var(--crimson)}
+.lockrow{align-items:center}
+.lockrow > div{flex:1;min-width:0}
+.lockrow .btn{flex:none}
+#ttoast.taway{background:#CC4B37;color:#fff}

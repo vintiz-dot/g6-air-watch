@@ -8,7 +8,7 @@
   const C = window.AW, D = window.LESSON, CAT = window.AW_CAT, E = window.AWE;
   const NST = C.stations || 11;
 
-  let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, METER = {}, EVENTS = {}, HOMEWORK = {}, HWCFG = {}, FLAGS = {};
+  let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, METER = {}, EVENTS = {}, HOMEWORK = {}, HWCFG = {}, FLAGS = {}, PRES = {};
   let connected = null, builtFor = null, sessMode = null, projWin = null;
   const TID = Math.random().toString(36).slice(2);
   let BC = null; try { BC = new BroadcastChannel("aw_remote"); } catch (e) { BC = null; }
@@ -91,6 +91,7 @@
     LS.watchHomework(v => { HOMEWORK = v || {}; later("photos", paintAllPhotos, 300); later("sess", paintSessionDyn, 300); later("pairs", paintPairs, 300); later("run", paintRunLive, 300); });
     LS.watchHomeworkConfig(v => { HWCFG = v || {}; later("sess", paintSessionDyn, 300); });
     LS.watchPhotoFlags(v => { FLAGS = v || {}; later("photos", paintAllPhotos, 300); });
+    LS.watchPresence(v => { PRES = v || {}; later("pairs", paintPairs, 150); setTimeout(() => later("pairs", paintPairs, 50), 5200); });
     paintLive();
   }
 
@@ -156,7 +157,7 @@
     }
     if (mode === "before") {
       s.innerHTML = '<h3>Before the bell <small id="joinedTxt"></small></h3>' +
-        '<button class="btn g bigbtn" id="bellBtn" type="button" style="margin:0 0 8px">▶ Bell — start the 45 minutes</button><div id="setupRows"></div>' +
+        '<button class="btn g bigbtn" id="bellBtn" type="button" style="margin:0 0 8px">▶ Bell — start the 45 minutes</button><div id="setupRows"></div><div class="checkrow lockrow" id="lockRow"></div>' +
         '<details class="setupbox"><summary><b>Photos for screen 2</b> <span class="vn" id="phCount"></span></summary><div class="photobox" id="setupPhotos"></div></details>' +
         '<details class="setupbox"><summary><b>PM2.5 meter (screen 3)</b></summary><div class="meterbox" id="setupMeter"></div></details>' +
         '<div class="btns"><button class="btn sm ghost danger" id="newS" type="button"></button></div>';
@@ -166,7 +167,7 @@
       return;
     }
     if (mode === "running") {
-      s.innerHTML = '<h3>Lesson running <small id="joinedTxt"></small></h3><p class="vn" id="runTxt"></p><div class="btns"><button class="btn sm ghost" id="endS" type="button"></button><button class="btn sm ghost danger" id="newS" type="button"></button></div>' + packRow();
+      s.innerHTML = '<h3>Lesson running <small id="joinedTxt"></small></h3><p class="vn" id="runTxt"></p><div class="checkrow lockrow" id="lockRow"></div><div class="btns"><button class="btn sm ghost" id="endS" type="button"></button><button class="btn sm ghost danger" id="newS" type="button"></button></div>' + packRow();
       confirmBtn($("#endS"), "End the lesson", "Click again to end", () => LS.endSession());
       bindPack();
       confirmBtn($("#newS"), "New session", "Click again — clears everything", newSession);
@@ -190,6 +191,16 @@
       LS.logEvent("pack", {});
     };
   }
+  /* the laptops' lock: full screen + "Leave site?" from the bell to the end (on unless switched off) */
+  function paintLock() {
+    const lr = $("#lockRow"); if (!lr) return;
+    const off = !!ST.lockOff, key = String(off);
+    if (lr.dataset.k === key) return; lr.dataset.k = key;
+    lr.innerHTML = '<span class="s ' + (off ? "warn" : "ok") + '"></span><div><b>Laptops ' + (off ? "unlocked" : "locked from the bell") + '</b><small>' +
+      (off ? "No full screen and no “Leave site?” check. You still see who leaves." : "Full screen, and “Leave site?” before a tab closes. You see who leaves (red on the pair card).") + '</small></div>' +
+      '<button class="btn sm ghost" type="button">' + (off ? "Lock again" : "Unlock") + '</button>';
+    lr.querySelector("button").onclick = () => { LS.setState({ lockOff: off ? null : true }); LS.logEvent("lock", { on: off }); };
+  }
   function newSession() {
     LOC = { tab: LOC.tab }; saveLoc();
     LS.startSession();
@@ -199,6 +210,7 @@
     if (jt) jt.textContent = L.length + " of " + NST + " stations · " + L.reduce((s, p) => s + p.names.length, 0) + " students";
     const rt = $("#runTxt"); if (rt) rt.textContent = "Started at " + clock(ST.startedAt) + " · 45 minutes end at " + clock(ST.startedAt + PLAN.total * 60000) + ".";
     const pc = $("#phCount"); if (pc) pc.textContent = (ST.photos || []).length + " of 3 chosen";
+    paintLock();
     const box = $("#setupRows"); if (!box) return;
     const hwN = HW.list(HOMEWORK).filter(x => HW.days(x).length).length, rd = HW.readings(HOMEWORK), g = HW.guessScore(HOMEWORK);
     const cs = HWCFG.classStation;
@@ -729,6 +741,19 @@
     if (n === 7 && ((p.a || {}).s7 || {}).submitted) { LOC.pick7 = (LOC.pick7 || []).filter(x => x !== p.pid); LOC.pick7.push(p.pid); if (LOC.pick7.length > 3) LOC.pick7.shift(); }
     saveLoc(); later("show", paintShow, 60); later("rules", paintRules, 60);
   }
+  /* where a pair's laptop page is: hidden / another window / out of full screen only count after the bell */
+  const AWAY = { gone: ["✕ not connected", "The lesson page closed, the laptop went to sleep, or the Wi-Fi dropped. They reopen index.html → Continue as Station."],
+    closed: ["✕ tab closed", "The lesson tab was closed or reloaded. They reopen index.html → Continue as Station."],
+    hidden: ["↗ other tab or app", "The lesson page is hidden: another tab or app, a minimised window, or the screen went to sleep."],
+    blur: ["↗ other window", "Another window is in front of the lesson page."],
+    fs: ["⛶ left full screen", "They pressed Esc. Any tap brings full screen back."] };
+  function awayOf(p) {
+    if (ST.live === false || !ST.reset) return null;
+    const a = PRES[p.pid]; if (!a || !AWAY[a.k]) return null;
+    if (!ST.startedAt && (a.k === "hidden" || a.k === "blur" || a.k === "fs")) return null;
+    return a;
+  }
+  const awaySeen = {}; let pairsFrom = 0;
   function paintPairs() {
     const box = $("#pairs"); if (!box) return;
     if (document.querySelector("#pop")) return; /* keep the grid still while a nudge menu is open */
@@ -743,10 +768,12 @@
       if (c.empty) { box.appendChild(el("div", "pair empty", "Station " + c.empty + " — not joined")); return; }
       const p = c.p, a = (p.a || {})["s" + n] || {}, pr = E.progress(n, a, cx);
       const done = p.done && p.done[n], help = p.help, lastT = a.t || 0, opened = ST.screenAt || 0;
-      const idle = !done && !help && ST.startedAt && ST.live !== false && t - opened > 60000 && t - Math.max(lastT, opened) > 90000;
-      const card = el("div", "pair" + (done ? " done" : "") + (help ? " help" : "") + (idle ? " idle" : "") + (sugg.has(p.pid) ? " suggest" : ""));
+      const aw = awayOf(p);
+      const idle = !aw && !done && !help && ST.startedAt && ST.live !== false && t - opened > 60000 && t - Math.max(lastT, opened) > 90000;
+      const card = el("div", "pair" + (done ? " done" : "") + (help ? " help" : "") + (aw ? " away" : "") + (idle ? " idle" : "") + (sugg.has(p.pid) ? " suggest" : ""));
       card.innerHTML = '<div class="ph"><span class="stn">' + p.st + '</span><span class="who">' + esc(p.names.join(" & ")) + '<small>' + (c.dup ? "⚠ two laptops on station " + p.st : lastT ? "last typed " + U.ago(t - lastT) + " ago" : "joined " + clock(p.joined)) + '</small></span>' +
-        (help ? '<span class="flag hp">HELP · ' + U.ago(t - help) + '</span>' : sugg.has(p.pid) ? '<span class="flag sg">★ spotlight?</span>' : done ? '<span class="flag dn">✓ done</span>' : idle ? '<span class="flag id">quiet</span>' : '') + '</div>' +
+        (help ? '<span class="flag hp">HELP · ' + U.ago(t - help) + '</span>' : aw ? '<span class="flag aw" title="' + esc(AWAY[aw.k][1]) + '">' + AWAY[aw.k][0] + (aw.at ? ' · ' + U.ago(t - aw.at) : '') + '</span>' : sugg.has(p.pid) ? '<span class="flag sg">★ spotlight?</span>' : done ? '<span class="flag dn">✓ done</span>' : idle ? '<span class="flag id">quiet</span>' : '') + '</div>' +
+        (aw && help ? '<div class="awline">' + AWAY[aw.k][0] + (aw.at ? ' · ' + U.ago(t - aw.at) : '') + '</div>' : '') +
         '<div class="prog" title="' + pr.got + ' of ' + pr.of + ' parts"><i style="width:' + U.pct(pr.got, pr.of) + '%"></i></div>' +
         '<div class="sum">' + E.summary(n, p, cx) + '</div>' +
         (ST.startedAt ? '<div class="pg">' + E.pairGoals(p, ST).map(x => x.of ? '<span class="gtag sm g-' + x.k + '" title="' + esc(x.short) + ' checks met so far">' + esc(x.short[0]) + ' ' + x.met + '/' + x.of + '</span>' : '').join("") + '</div>' : '') +
@@ -759,9 +786,13 @@
       if (help) { const hb = el("button", "btn g", "✓ Helped"); hb.type = "button"; hb.onclick = () => { LS.setHelp(p.pid, false); LS.logEvent("helped", { pid: p.pid, st: p.st, n }); }; acts.appendChild(hb); }
       box.appendChild(card);
     });
-    const doneN = L.filter(p => p.done && p.done[n]).length, helpN = L.filter(p => p.help).length;
+    const doneN = L.filter(p => p.done && p.done[n]).length, helpN = L.filter(p => p.help).length, awayL = L.filter(p => awayOf(p));
     $("#phead").innerHTML = '<b>Pairs · screen ' + n + '</b><span>' + L.length + ' of ' + NST + ' stations · ' + L.reduce((s, p) => s + p.names.length, 0) + ' students</span><span>done ' + doneN + ' of ' + L.length + '</span>' +
-      (helpN ? '<span style="color:var(--crimson);font-weight:700">help ' + helpN + '</span>' : '') + '<span>“quiet” = nothing typed for 90 s</span>';
+      (helpN ? '<span style="color:var(--crimson);font-weight:700">help ' + helpN + '</span>' : '') +
+      (awayL.length ? '<span style="color:var(--crimson);font-weight:700" title="Stations whose lesson page is closed, hidden or out of full screen">away ' + awayL.length + ' (st ' + awayL.map(p => p.st).join(", ") + ')</span>' : '') + '<span>“quiet” = nothing typed for 90 s</span>';
+    /* someone has been away for 5 seconds: say so once */
+    if (!pairsFrom) pairsFrom = t;
+    awayL.forEach(p => { const a = awayOf(p); if (a.at && a.at >= pairsFrom - 5000 && t - a.at >= 5000 && awaySeen[p.pid] !== a.k + a.at) { awaySeen[p.pid] = a.k + a.at; toastT("Station " + p.st + " (" + p.names.join(" & ") + "): " + AWAY[a.k][0].replace(/^\S+ /, ""), 6000, false, "taway"); } });
   }
   function nudgeMenu(btn, p) {
     closePop();
@@ -874,6 +905,7 @@
       case "pack": return "Print pack opened";
       case "wall": return "Wonder Wall: " + e.k + " question" + (e.k === 1 ? "" : "s") + " put up";
       case "blank": return e.on ? "Projector blanked" : "Projector back on";
+      case "lock": return e.on ? "Laptops locked (full screen + leave check)" : "Laptops unlocked";
     }
     return e.kind;
   }

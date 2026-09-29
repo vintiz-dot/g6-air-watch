@@ -51,6 +51,56 @@
   const joined = () => !!(P.joined && P.names && P.names.length >= 1 && P.st);
   const screenNow = () => offline ? offlineScreen : (ST.screen || 1);
 
+  /* ───────── stay in the lesson ─────────
+     From the bell to the end (unless the teacher unlocks the laptops): closing or reloading the tab makes
+     the browser ask "Leave site?" first, and the first tap or key puts the laptop in full screen.
+     The teacher sees when this page is hidden, behind another window, out of full screen, or closed. */
+  const guarded = () => joined() && !!ST.startedAt && ST.live !== false && !ST.lockOff;
+  window.addEventListener("beforeunload", e => { if (!guarded()) return; e.preventDefault(); e.returnValue = ""; });
+  const fsOK = () => !!(document.documentElement.requestFullscreen && document.fullscreenEnabled);
+  let fsFails = 0, fsMine = false, fsSeen = false, fsAsking = false;
+  const wantFS = () => guarded() && fsOK() && fsFails < 3;
+  function goFS() {
+    if (!wantFS() || document.fullscreenElement || fsAsking) return;
+    fsAsking = true;
+    let pr = null;
+    try { pr = document.documentElement.requestFullscreen({ navigationUI: "hide" }); } catch (e) { fsFails++; }
+    Promise.resolve(pr).then(() => { fsAsking = false; if (document.fullscreenElement) { fsMine = true; fsFails = 0; } }, () => { fsAsking = false; fsFails++; paintStay(); });
+  }
+  /* any tap or key (not Esc, which the browser keeps for leaving full screen) goes back to full screen */
+  document.addEventListener("pointerdown", e => { if (e.pointerType === "mouse") goFS(); }, true);
+  document.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") goFS(); }, true);
+  document.addEventListener("keydown", e => { if (e.key !== "Escape") goFS(); }, true);
+  const stayBox = el("div", "", ""); stayBox.id = "stay"; stayBox.hidden = true; document.body.appendChild(stayBox);
+  function paintStay() {
+    const show = wantFS() && !document.fullscreenElement;
+    stayBox.hidden = !show;
+    if (show) stayBox.textContent = fsSeen ? "⛶ Back to full screen: tap anywhere. Your teacher can see who leaves the lesson." : "⛶ The lesson has started: tap anywhere for full screen.";
+  }
+  let away = null, blurred = false, blurT = null;
+  function awayNow() {
+    if (document.visibilityState === "hidden") return "hidden";
+    if (blurred) return "blur";
+    if (fsSeen && wantFS() && !document.fullscreenElement) return "fs";
+    return null;
+  }
+  function report() {
+    if (!joined() || ST.live === false) { away = null; LS.presence(null); return; }
+    const k = awayNow();
+    if (!k) away = null; else if (!away || away.k !== k) away = { k, at: LS.now() };
+    LS.presence(P.pid, away);
+  }
+  function stayCheck() {
+    if (!guarded()) fsSeen = false;   /* unlocked or ended: a later lock starts again from "tap for full screen" */
+    if (!guarded() && document.fullscreenElement && fsMine) { fsMine = false; try { document.exitFullscreen().catch(() => {}); } catch (e) {} }
+    paintStay(); report();
+  }
+  document.addEventListener("fullscreenchange", () => { if (document.fullscreenElement) fsSeen = true; else fsMine = false; paintStay(); report(); });
+  document.addEventListener("visibilitychange", report);
+  window.addEventListener("blur", () => { clearTimeout(blurT); blurT = setTimeout(() => { blurred = !document.hasFocus(); report(); }, 3000); });
+  window.addEventListener("focus", () => { clearTimeout(blurT); if (blurred) { blurred = false; report(); } });
+  window.addEventListener("pagehide", () => { if (joined() && ST.live !== false) LS.presence(P.pid, { k: "closed", at: LS.now() }); });
+
   function paintLive() {
     const lv = $("#live"), tx = $("#livetx");
     const err = LS.lastError();
@@ -836,10 +886,10 @@
   /* ───────── render ───────── */
   function render(force) {
     paintLive();
-    if (!joined()) { renderJoin(); return; }
-    if (ST.live === false && !offline) { $("#app").innerHTML = '<div class="card"><h2 class="title">The lesson has finished.</h2><p class="sub">Thank you. Your work is saved.</p></div>'; $("#dock").hidden = true; return; }
+    if (!joined()) { renderJoin(); stayCheck(); return; }
+    if (ST.live === false && !offline) { $("#app").innerHTML = '<div class="card"><h2 class="title">The lesson has finished.</h2><p class="sub">Thank you. Your work is saved.</p></div>'; $("#dock").hidden = true; stayCheck(); return; }
     const n = screenNow();
-    if (!force && n === shown) { repaintLive(); return; }
+    if (!force && n === shown) { repaintLive(); stayCheck(); return; }
     paintRoles(n);
     shown = n;
     $("#dock").hidden = false;
@@ -847,6 +897,7 @@
     const box = el("div", "card scr on");
     app.appendChild(box);
     SCREENS[n](n, box);
+    stayCheck();
     if (offline) {
       const nav = el("div", "btns");
       const back = el("button", "btn ghost", "← Back"), next = el("button", "btn", "Next →");

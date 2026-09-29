@@ -62,6 +62,15 @@
   const on = (r, fn, dflt) => { if (!boot()) { fn(dflt); return; } try { r().on("value", s => fn(s.val() == null ? dflt : s.val())); } catch (e) { fn(dflt); } };
   const set = (r, v, what) => { if (!boot()) return Promise.resolve(false); return r().set(clean(v)).then(() => true).catch(e => { fail(what || "saving", e); return false; }); };
   const upd = (r, v, what) => { if (!boot()) return Promise.resolve(false); return r().update(clean(v)).then(() => true).catch(e => { fail(what || "saving", e); return false; }); };
+  /* presence: where this laptop's lesson page is, for the teacher's "who left" flags.
+     The database writes {k:"gone"} by itself when the page closes or loses its connection. */
+  const pres = { pid: null, away: null, up: false, watching: false };
+  function armPresence() {
+    if (!pres.pid || !pres.up || !boot()) return;
+    const r = L("presence/" + pres.pid), SV = window.firebase && firebase.database && firebase.database.ServerValue;
+    try { r.onDisconnect().set({ k: "gone", at: SV && SV.TIMESTAMP ? SV.TIMESTAMP : LS.now() }).catch(() => {}); } catch (e) {}
+    set(() => r, pres.away, "saving");
+  }
   const pushTo = (r, v, what) => { if (!boot()) return Promise.resolve(null); try { const p = r().push(); return p.set(clean(v)).then(() => p.key).catch(e => { fail(what || "saving", e); return null; }); } catch (e) { return Promise.resolve(null); } };
 
   const LS = {
@@ -74,6 +83,23 @@
     watchConnected(fn) {
       if (!boot()) { fn(false); return; }
       try { db.ref(".info/connected").on("value", s => fn(s.val() === true)); } catch (e) { fn(false); }
+    },
+
+    /* where each joined laptop's page is: null = on the lesson; {k, at}: hidden | blur | fs | closed | gone */
+    watchPresence: fn => on(() => L("presence"), fn, {}),
+    presence(pid, away) {
+      if (!boot()) return;
+      pid = pid || null; away = pid ? (away || null) : null;
+      const moved = pres.pid !== pid, before = JSON.stringify(pres.away);
+      if (moved && pres.pid) { const old = pres.pid; try { L("presence/" + old).onDisconnect().cancel().catch(() => {}); } catch (e) {} set(() => L("presence/" + old), null, "saving"); }
+      pres.pid = pid; pres.away = away;
+      if (!pres.watching) {
+        pres.watching = true;
+        try { db.ref(".info/connected").on("value", s => { pres.up = s.val() === true; if (pres.up) armPresence(); }); } catch (e) {}
+        return;
+      }
+      if (!pres.up || !pid) return;
+      if (moved) armPresence(); else if (JSON.stringify(away) !== before) set(() => L("presence/" + pid), away, "saving");
     },
 
     /* state */
@@ -112,7 +138,7 @@
     startSession() {
       if (!boot()) return Promise.resolve(false);
       const now = LS.now();
-      return Promise.all(["pairs", "questions", "suggestions", "nudges", "feedback", "votes", "meter", "events"].map(k => L(k).remove()))
+      return Promise.all(["pairs", "questions", "suggestions", "nudges", "feedback", "votes", "meter", "events", "presence"].map(k => L(k).remove()))
         .then(() => L("state").set({ screen: 1, live: true, reset: now, startedAt: null, screenAt: now, timerEnd: null, pausedLeft: null, reveal: {}, photos: null, ruleVote: null, classRule: null, spot: null }))
         .then(() => { LS.logEvent("session", {}); return true; }).catch(e => { fail("starting the session", e); return false; });
     },

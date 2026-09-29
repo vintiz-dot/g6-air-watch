@@ -15,6 +15,7 @@ Two parts, one folder:
 | `teacher.html` | your laptop (PIN) | Runs the lesson: screens and timers, reveals, spotlight, private nudges, student ideas, rule vote, the three goal scores, live targets. |
 | `projector.html` | the projector | Class results only: timer, the three goal scores, votes, charts, Wonder Wall, spotlight. Opened from `teacher.html`. |
 | `observer.html` | observers’ laptop | Read-only: every pair’s live work, the three goals measured as the lesson goes, planned vs actual time, and the evidence for each framework component. |
+| `cam.html` | your phone | **Live camera** for the jar test: opened from the QR code on `teacher.html`; sends about 3 pictures a second to the projector, the laptops and the observers while you show it, and records a video on the phone. |
 
 Teacher PIN: the `teacherPin` in `assets/aw-config.js`.
 
@@ -242,6 +243,8 @@ two links to students. **Start a new session** on `teacher.html` clears the less
    **Start a new session**.
 4. Press **Projector ↗**, drag the window onto the projector, then press **Full screen on the
    projector** (Chrome and Edge can send it to the projector by themselves; allow the permission if asked).
+   **Live camera:** open **Live camera (your phone)** in *Show on the projector*, scan the QR code with
+   your phone (see *Live camera* below), and stand the phone at the jar before the bell.
 5. In **Before the bell**: type the meter’s room reading and choose three sky photos (★ starred ones come first).
 6. At 9:40 press **▶ Bell**. The 45 minutes and the screen-1 timer start.
 
@@ -276,9 +279,10 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   exact page and question for that screen (p.30–34), with *We wrote it in our books* — then the challenge card.
 - Screen 2: each pair sees the questions both partners wrote at home and picks one to post. Under it,
   the laptops invite them to press **Suggest a change** if a task could work better for them.
-- Screen 3: type the meter numbers in the **Show on the projector** box (they appear on the board as you
-  type). After “60 seconds later”, **Tab** → *Show how small PM2.5 is* — the EPA hair-and-sand picture
-  appears on the laptops and the projector.
+- Screen 3: **Tab** → the class predictions; **Tab** → *Show the live camera on every screen* (if the
+  phone is live). Type the meter numbers in the **Show on the projector** box — they appear on the board and
+  on the camera view as you type. After “60 seconds later”, **Tab** → *Show how small PM2.5 is*: the EPA
+  hair-and-sand picture appears on the laptops and the projector, and the camera view closes.
 - Screen 6: a short bridge before the graphs (laptops and projector): CO₂ is not in the AQI; at these
   levels it warms the planet rather than hurting lungs — a different problem, the same skill of reading
   a trend. The laptops show the pair’s whole week (and the class station); tapping a number fills
@@ -309,6 +313,25 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   set a little smaller so each student fits one half-page.
 - Keys: **Page Down** next · **Page Up** back · **Tab** show the next thing · **B** blank the projector ·
   **P** pause/resume · **+** one more minute · **Esc** end the spotlight. (**B** no longer means back.)
+
+### Live camera (the jar test from your phone)
+
+- **Set up (before the bell):** on your page, *Show on the projector* → **Live camera (your phone)** →
+  scan the QR code with the phone’s camera (iPhone: it opens in Safari; Android: Chrome) → **Turn on the
+  camera** → allow it. Stand the phone sideways where it sees the jar **and** the meter’s number, plugged
+  in if you can, then press **● Start: live + record**. Only your laptop’s preview shows it for now.
+- **Show it:** on screen 3, **Tab** → *Show the live camera on every screen* (or the **Show on every
+  screen** button). The projector, every laptop and the observers’ page show it about 1 second behind, about
+  3 pictures a second (pictures, not smooth video — it works on the school Wi-Fi with nothing to install).
+  Students can tap it to make it bigger. The meter numbers you type are shown on it.
+- **Hide it:** the size picture (Tab), **Hide from the screens**, or moving to another screen.
+- **Stop on the phone** at the end → **Save the video** (iPhone: *Save Video* puts it in Photos; Android:
+  it goes to Downloads). The video is only on that page until you save it — keep the page open and the
+  phone unlocked while it records.
+- It uses about 0.7 Mbps of Wi-Fi per screen while shown (about 10 Mbps for the class) and almost nothing
+  when hidden. If the Wi-Fi is slow the screens get fewer pictures, never old ones. The phone can use 4G.
+- The link stays the same when you start a new session. If the phone ever says the link is old, scan the
+  QR code again.
 
 ### Keeping students in the lesson
 

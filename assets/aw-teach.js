@@ -11,6 +11,7 @@
   let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, METER = {}, EVENTS = {}, HOMEWORK = {}, HWCFG = {}, FLAGS = {}, PRES = {};
   let connected = null, builtFor = null, sessMode = null, projWin = null;
   const TID = Math.random().toString(36).slice(2);
+  const CAM = { live: false, frame: null }; let camDet = null, camLink = "", camBtnKey = "";
   let BC = null; try { BC = new BroadcastChannel("aw_remote"); } catch (e) { BC = null; }
   let LOC = {}; try { LOC = JSON.parse(localStorage.getItem("aw_teach_local") || "{}") || {}; } catch (e) { LOC = {}; }
   const saveLoc = () => { try { localStorage.setItem("aw_teach_local", JSON.stringify(LOC)); } catch (e) {} };
@@ -102,8 +103,12 @@
     tx.textContent = err ? "Not saving — " + err : !LS.available() ? "No database — check firebase-config.js (check.html)" : connected === false ? "Reconnecting…" : "Live · room " + (C.lessonRoom || "G6W6");
   }
 
+  /* the live camera's key: made with the session and kept by later sessions, so the phone's link stays valid */
+  const newCamKey = () => Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 8);
+  let camKeyAt = 0;
   function onState() {
     const so = $("#spotOff"); if (so) so.hidden = !ST.spot;
+    if (ST.reset && !ST.camKey && Date.now() - camKeyAt > 3000) { camKeyAt = Date.now(); LS.setState({ camKey: newCamKey() }); }
     if (LOC.reset !== ST.reset) { LOC = { reset: ST.reset, tab: LOC.tab }; saveLoc(); }
     paintSession();
     paintSteps();
@@ -203,7 +208,7 @@
   }
   function newSession() {
     LOC = { tab: LOC.tab }; saveLoc();
-    LS.startSession();
+    LS.startSession({ camKey: ST.camKey || newCamKey() });
   }
   function paintSessionDyn() {
     const L = E.pairs(PAIRS), jt = $("#joinedTxt");
@@ -219,6 +224,7 @@
       [hwN ? "ok" : "warn", "Homework", hwN + " students · " + rd + " readings · eyes right " + g.pct + "%"],
       [cs ? "ok" : "warn", "Class station", cs ? cs.name : "none chosen (time chart will be empty)"],
       [(ST.photos || []).length ? "ok" : "warn", "Photo game", (ST.photos || []).length + " of 3 photos chosen (below)"],
+      [CAM.live ? "ok" : "warn", "Live camera", CAM.live ? "phone is live — you see it in Show on the projector → Live camera" : "optional: Show on the projector → Live camera → scan the QR with your phone"],
       [METER.base != null ? "ok" : "warn", "Meter", METER.base != null ? "room air " + METER.base + " µg/m³" : "type the room reading (below)"],
       [projWin && !projWin.closed ? "ok" : "warn", "Projector", projWin && !projWin.closed ? "window open — make it full screen on the projector" : "press Projector ↗ (Windows+P → Extend)"],
       [L.length >= NST ? "ok" : "warn", "Pairs", L.length + " of " + NST + " stations joined"]
@@ -230,7 +236,7 @@
   function openScreen(n) {
     if (!ST.reset) return;
     const t = now();
-    LS.setState({ screen: n, screenAt: t, timerEnd: ST.startedAt && ST.live !== false ? t + scr(n).min * 60000 : null, pausedLeft: null, spot: null, blank: null });
+    LS.setState({ screen: n, screenAt: t, timerEnd: ST.startedAt && ST.live !== false ? t + scr(n).min * 60000 : null, pausedLeft: null, spot: null, blank: null, camOn: null });
     LS.logEvent("screen", { n });
   }
   function plus1() {
@@ -365,7 +371,7 @@
   const SEQ = {
     1: [],
     2: [["rev", "guess"], ["rev", "photos"], ["wall"], ["spot", 1], ["spot", 2]],
-    3: [["rev", "pred"], ["rev", "size"], ["spot", 1]],
+    3: [["rev", "pred"], ["cam"], ["rev", "size"], ["spot", 1]],
     4: [["rev", "sort"], ["spot", 1], ["rev", "q1q2"]],
     5: [["spot", 1]],
     6: [["rev", "dbq"], ["spot", 1]],
@@ -377,10 +383,10 @@
     6: "a number with its source", 7: "no place name — true for any city", 8: "a reason in every part", 9: "a sharper question for E12" };
   const NOSHOW = { 1: "Nothing to show on this screen — silent start. The class vote stays hidden until screen 9." };
   const marks = n => { const q = SEQ[n] || [], has = k => q.some(x => x[0] === k);
-    return (has("rev") || has("vote") ? '<i class="m r">▶</i>' : "") + (has("wall") ? '<i class="m w">W</i>' : "") + (has("spot") ? '<i class="m s">★</i>' : "") || '<i class="m">·</i>'; };
+    return (has("rev") || has("vote") || has("cam") ? '<i class="m r">▶</i>' : "") + (has("wall") ? '<i class="m w">W</i>' : "") + (has("spot") ? '<i class="m s">★</i>' : "") || '<i class="m">·</i>'; };
   function seqSummary(n) {
     const q = SEQ[n] || [], parts = [], spots = q.filter(x => x[0] === "spot").length;
-    q.forEach(([k, a]) => { if (k === "rev") parts.push(REV[a][0].replace(/^(Reveal|Show) /, "").replace(/^the /, "")); if (k === "wall") parts.push("the Wonder Wall"); if (k === "vote") parts.push("the rule vote"); });
+    q.forEach(([k, a]) => { if (k === "rev") parts.push(REV[a][0].replace(/^(Reveal|Show) /, "").replace(/^the /, "")); if (k === "wall") parts.push("the Wonder Wall"); if (k === "vote") parts.push("the rule vote"); if (k === "cam") parts.push("the live camera"); });
     if (spots) parts.push(spots === 1 ? "a spotlight" : spots + " spotlights");
     return parts.length ? parts.join(" · ") : "nothing to show";
   }
@@ -449,6 +455,12 @@
         out.push({ kind, label: "Put " + (picks.length === 1 ? "this rule" : "these " + picks.length + " rules") + " to the vote", sub: picks.map(p => "St " + p.st + ": “" + txt(((p.a || {}).s7 || {}).rule) + "”").join(" · "), state: "ready", run: () => startVote(picks) });
         return;
       }
+      if (kind === "cam") {
+        if (ST.camOn) { out.push({ kind, label: "Live camera on every screen", sub: CAM.live ? "Click to hide it · the size picture (next) hides it too" : "Waiting for the phone’s pictures — is it still live?", state: "done", click: () => camShow(false) }); return; }
+        if (!CAM.live) { out.push({ kind, label: "Live camera (phone)", sub: "Phone not live — scan the QR code below with your phone, then press Start on it", state: "skip", click: () => { const d = $("#camDet"); if (d) { d.open = true; d.scrollIntoView({ block: "nearest" }); } } }); return; }
+        out.push({ kind, label: "Show the live camera on every screen", sub: "Projector, laptops and observers — the jar test from your phone", state: "ready", run: () => camShow(true), click: () => camShow(true) });
+        return;
+      }
       if (kind === "close") {
         const rv = ST.ruleVote && ST.ruleVote.items ? ST.ruleVote : null;
         if (!rv) { out.push({ kind, label: "Close the vote → class rule", sub: "After the vote opens", state: "wait" }); return; }
@@ -457,10 +469,16 @@
         out.push({ kind, label: "Close the vote → the winner is the class rule", sub: tot + " of " + N + " pairs have voted", state: "ready", run: closeVote });
       }
     });
+    if (ST.camOn && !(SEQ[n] || []).some(x => x[0] === "cam")) out.push({ kind: "camoff", label: "Hide the live camera", sub: "It is on every screen now", state: "ready", run: () => camShow(false) });
     if (ST.spot) out.push({ kind: "clear", label: "End the spotlight", sub: "“" + (ST.spot.text || "") + "” — station " + ST.spot.st, state: "ready", run: () => LS.setState({ spot: null }) });
     return out;
   }
-  function reveal(key, on) { const patch = { ["reveal/" + key]: !!on }; if (on) { patch.spot = null; patch.blank = null; } LS.setState(patch); if (on) LS.logEvent("reveal", { what: key, n: cur() }); }
+  function reveal(key, on) { const patch = { ["reveal/" + key]: !!on }; if (on) { patch.spot = null; patch.blank = null; if (key === "size" && ST.camOn) { patch.camOn = null; LS.logEvent("cam", { on: false, n: cur() }); } } LS.setState(patch); if (on) LS.logEvent("reveal", { what: key, n: cur() }); }
+  /* the live camera from the teacher's phone (cam.html) */
+  function camShow(on) {
+    LS.setState(on ? { camOn: true, spot: null, blank: null } : { camOn: null });
+    LS.logEvent("cam", { on: !!on, n: cur() });
+  }
   function spotCand(c) {
     const p = Object.assign({ pid: c.pid }, PAIRS[c.pid] || { st: c.st, names: [] });
     spotlight(p, c.kind, c.text, c.key);
@@ -512,12 +530,14 @@
       flashRow(+b.dataset.i);
     };
     /* screen 3: the meter numbers go straight onto the projector as they are typed */
+    $("#shExtra").appendChild(camBox()); camDet.open = n === 3 || !!ST.camOn; paintCam();
     if (n === 3) { const m = el("div", "meterbox"); $("#shExtra").appendChild(m); mountMeter(m, "r"); }
     paintShow();
   }
   let lastNudge = "";
   function paintShow() {
     const box = $("#showCard"); if (!box || !$("#shList")) return;
+    paintCam();
     const n = cur(), running = ST.reset && ST.startedAt && ST.live !== false;
     $("#shWhere").textContent = "screen " + n + " · " + scr(n).name;
     const acts = showActions(n), nextI = running ? acts.findIndex(x => x.state === "ready" || x.state === "wait") : -1;
@@ -541,6 +561,50 @@
     /* something worth a spotlight has just appeared: say so once */
     const a = nextI >= 0 ? acts[nextI] : null;
     if (a && a.spot && a.state === "ready") { const k = (ST.reset || "") + ":" + n + ":" + nextI; if (k !== lastNudge) { lastNudge = k; toastT("★ Ready to spotlight: station " + a.cand.st + (a.cand.why ? " — " + a.cand.why : "") + ". Press Tab (or click the amber row).", 7000, false, "tspot"); } }
+  }
+  /* ───────── the live camera box (in "Show on the projector", every screen; open on screen 3) ───────── */
+  function qrSVG(text) {
+    if (typeof qrcode !== "function") return "";
+    try { const q = qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 4, margin: 12, scalable: true }).replace(/<description[^>]*>[\s\S]*?<\/description>/, "").replace(/aria-labelledby="[^"]*"/, 'aria-label="QR code that opens the live camera page on your phone"'); }
+    catch (e) { return ""; }
+  }
+  function camBox() {
+    if (camDet) return camDet;
+    camDet = el("details", "camdet"); camDet.id = "camDet";
+    camDet.innerHTML = '<summary><b>Live camera (your phone)</b> <span class="camst"></span></summary>' +
+      '<div class="phoneqr camqr"><div class="qr"></div><div class="qrhow"><ol>' +
+      '<li>Scan the square with your phone’s camera and open the link.</li>' +
+      '<li><b>Turn on the camera</b>, aim at the jar and the meter, press <b>Start</b> — it records a video on the phone too.</li>' +
+      '<li><b>Tab</b> or <b>Show on every screen</b>: projector, laptops and observers.</li></ol><p class="vn qrurl"></p></div></div>' +
+      '<div class="campv"></div><div class="btns cambtns"></div>';
+    AWCAM.mount({ el: camDet.querySelector(".campv"), kind: "preview", title: "Preview — only you see this",
+      onStatus: st => { const was = CAM.live; CAM.live = st.live; CAM.frame = st.frame; paintCamSt(); if (was !== st.live) { later("show", paintShow, 50); later("sess", paintSessionDyn, 100); } } });
+    return camDet;
+  }
+  function paintCam() {
+    if (!camDet) return;
+    const key = ST.camKey || "";
+    const link = key ? location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "") + "cam.html?k=" + key : "";
+    if (link !== camLink) {
+      camLink = link;
+      camDet.querySelector(".qr").innerHTML = link ? qrSVG(link) : "";
+      camDet.querySelector(".qrurl").innerHTML = link ? 'No QR reader? Type: <b>' + esc(link.replace(/^https?:\/\//, "")) + '</b>' : "Start a session first.";
+    }
+    const bk = [!!ST.camOn, CAM.live, !!key].join();
+    if (bk !== camBtnKey) {
+      camBtnKey = bk;
+      const b = camDet.querySelector(".cambtns"); b.innerHTML = "";
+      const sh = el("button", "btn sm " + (ST.camOn ? "ghost" : "g"), ST.camOn ? "Hide from the screens" : "Show on every screen"); sh.type = "button";
+      sh.disabled = !key || (!ST.camOn && !CAM.live); sh.title = !CAM.live && !ST.camOn ? "Start the phone first" : "";
+      sh.onclick = () => camShow(!ST.camOn); b.appendChild(sh);
+    }
+    paintCamSt();
+  }
+  function paintCamSt() {
+    if (!camDet) return;
+    const s = camDet.querySelector(".camst"), f = CAM.frame;
+    s.textContent = ST.camOn ? (CAM.live ? "on every screen" : "on the screens — waiting for the phone") : CAM.live ? "phone live · only you see it" + (f && f.fps ? " · " + f.fps + "/s" : "") : "phone not live";
+    s.className = "camst" + (ST.camOn ? " on" : CAM.live ? " ok" : "");
   }
   function paintSpotCtl() {
     const box = $("#spotCtl"); if (!box) return;
@@ -906,6 +970,7 @@
       case "wall": return "Wonder Wall: " + e.k + " question" + (e.k === 1 ? "" : "s") + " put up";
       case "blank": return e.on ? "Projector blanked" : "Projector back on";
       case "lock": return e.on ? "Laptops locked (full screen + leave check)" : "Laptops unlocked";
+      case "cam": return e.on ? "Live camera on every screen" : "Live camera hidden";
     }
     return e.kind;
   }

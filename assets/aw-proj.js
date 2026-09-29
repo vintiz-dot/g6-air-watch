@@ -332,7 +332,12 @@
   }
   const queued = {};
   function later(name, fn, ms) { if (queued[name]) return; queued[name] = setTimeout(() => { queued[name] = null; try { fn(); } catch (e) { console.error(e); } }, ms || 150); }
-  const all = () => { document.body.classList.toggle("blank", !!ST.blank); paintTop(); paintStage(); paintBot(); paintSpot(); };
+  const all = () => { document.body.classList.toggle("blank", !!ST.blank); paintTop(); paintStage(); paintBot(); paintSpot(); fitCam(); };
+  /* the live camera from the teacher's phone: over the stage, between the top bar and the bottom line */
+  const camEl = document.createElement("div"); camEl.id = "pcam"; document.body.appendChild(camEl);
+  if (window.AWCAM) AWCAM.mount({ el: camEl, kind: "proj" });
+  function fitCam() { const t = $("#ptop"), b = $("#pbot"); camEl.style.top = (t ? t.offsetHeight : 0) + "px"; camEl.style.bottom = (b ? b.offsetHeight : 0) + "px"; }
+  window.addEventListener("resize", fitCam);
 
   /* the class station's live number, every 10 minutes */
   function pollAqi() {

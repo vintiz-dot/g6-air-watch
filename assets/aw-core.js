@@ -102,6 +102,10 @@
       if (moved) armPresence(); else if (JSON.stringify(away) !== before) set(() => L("presence/" + pid), away, "saving");
     },
 
+    /* live camera (cam.html on the teacher's phone): the newest picture only, under cam/<key> */
+    camFrame: (key, v) => set(() => L("cam/" + key), v, "sending the picture"),
+    getCam: key => boot() ? L("cam/" + key).once("value").then(s => s.val()).catch(() => null) : Promise.resolve(null),
+
     /* state */
     watchState: fn => on(() => L("state"), fn, {}),
     setState: patch => upd(() => L("state"), patch, "changing the screen"),
@@ -135,11 +139,11 @@
 
     /* session: "new session" clears everything and opens screen 1 with no clock running;
        "bell" starts the 45 minutes and the screen-1 timer. */
-    startSession() {
+    startSession(keep) {
       if (!boot()) return Promise.resolve(false);
       const now = LS.now();
-      return Promise.all(["pairs", "questions", "suggestions", "nudges", "feedback", "votes", "meter", "events", "presence"].map(k => L(k).remove()))
-        .then(() => L("state").set({ screen: 1, live: true, reset: now, startedAt: null, screenAt: now, timerEnd: null, pausedLeft: null, reveal: {}, photos: null, ruleVote: null, classRule: null, spot: null }))
+      return Promise.all(["pairs", "questions", "suggestions", "nudges", "feedback", "votes", "meter", "events", "presence", "cam"].map(k => L(k).remove()))
+        .then(() => L("state").set(clean(Object.assign({ screen: 1, live: true, reset: now, startedAt: null, screenAt: now, timerEnd: null, pausedLeft: null, reveal: {}, photos: null, ruleVote: null, classRule: null, spot: null }, keep || {}))))
         .then(() => { LS.logEvent("session", {}); return true; }).catch(e => { fail("starting the session", e); return false; });
     },
     bell(firstMin) {

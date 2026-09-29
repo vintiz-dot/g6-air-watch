@@ -588,3 +588,62 @@ body.proj.blank::after{content:"";position:fixed;inset:0;background:#000;z-index
 .lockrow > div{flex:1;min-width:0}
 .lockrow .btn{flex:none}
 #ttoast.taway{background:#CC4B37;color:#fff}
+/* ── the live camera (the teacher's phone → projector, laptops, observers, teacher preview) ── */
+.camview{background:#0B1419;color:#fff;border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+.camview[hidden]{display:none}
+.cvhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:8px 12px;background:#132630;font-size:14px}
+.cvlive{background:#CC4B37;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;letter-spacing:.08em;animation:pulse 1.6s ease-in-out infinite}
+.cvtitle{font-weight:700}
+.cvmeter{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;font-size:13px;color:#CFE4EE}
+.cvmeter b{color:#fff;font-size:1.3em;font-variant-numeric:tabular-nums}
+.cvmeter i{font-style:normal;opacity:.6}
+.cvmeter small{opacity:.8}
+.cvpic{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000}
+.cvpic img{display:block;max-width:100%;max-height:100%;object-fit:contain}
+.cvwait{display:none;position:absolute;left:0;right:0;bottom:12px;text-align:center;margin:0;font-weight:700;color:#FFC76B;text-shadow:0 1px 3px #000}
+.camview.stale .cvwait{display:block}
+.camview.stale img{opacity:.35}
+.camview.stale .cvlive{background:#5A7480;animation:none}
+.cvtap{margin:0;padding:6px 12px;font-size:12px;color:#9FC4D4;text-align:center}
+/* projector: over the stage, between the top bar and the bottom line */
+#pcam{position:fixed;left:0;right:0;top:0;bottom:0;z-index:85;border-radius:0}
+#pcam .cvhead{font-size:.9em;padding:.4em 1.2em}
+#pcam .cvmeter{font-size:1.15em}
+#pcam .cvpic img{width:100%;height:100%}
+/* laptops and observers: above the screen; tap to make it bigger (laptops) */
+#camBox,#ocam{margin:0 0 12px}
+#camBox .cvpic,#ocam .cvpic{height:46vh}
+#camBox .cvpic img,#ocam .cvpic img{max-height:46vh}
+#camBox{cursor:zoom-in}
+#camBox.big{position:fixed;inset:0;z-index:66;margin:0;border-radius:0;cursor:zoom-out}
+#camBox.big .cvpic{height:auto}
+#camBox.big .cvpic img{max-height:calc(100vh - 80px);height:100%}
+body.obs #ocam{max-width:980px;margin:0 auto 12px}
+/* teacher: the camera box in "Show on the projector" */
+.camdet{border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;margin:0 0 8px;background:var(--card)}
+.camdet summary{cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.camst{font-size:12px;font-weight:700;border-radius:999px;padding:2px 9px;background:var(--soft);color:var(--muted)}
+.camst.ok{background:#1C7293;color:#fff}
+.camst.on{background:#CC4B37;color:#fff}
+.camqr{grid-template-columns:1fr;margin-top:8px;padding:10px}
+.camqr .qr{justify-self:center}
+.camqr .qr svg{width:150px;height:150px}
+.camqr .qrhow ol{font-size:13px;margin:4px 0 4px 18px}
+.camdet .cambtns{margin-top:8px}
+.cv-preview{margin:8px 0 0;border-radius:10px}
+.cv-preview .cvhead{font-size:12px;padding:5px 8px}
+.cv-preview .cvpic{height:170px}
+.cv-preview .cvpic img{max-height:170px}
+/* the phone page (cam.html) */
+body.camphone #shell{max-width:720px}
+.camcard .camvid{position:relative;background:#000;border-radius:12px;overflow:hidden;margin:8px 0}
+.camcard video{display:block;width:100%;max-height:58vh;object-fit:contain;background:#000}
+.camlive{position:absolute;top:8px;left:8px;background:#CC4B37;color:#fff;border-radius:999px;padding:3px 10px;font-weight:800;font-size:13px;animation:pulse 1.6s ease-in-out infinite}
+.camcard .btns .btn.big{width:100%}
+.btn.stopbtn{background:#CC4B37;color:#fff}
+.cstat{font-size:14px;margin:8px 0 0;line-height:1.5}
+.cstat .on{color:var(--green)}
+.cstat .rec{color:#CC4B37}
+.savebox{border:2px solid var(--green);background:var(--okBg);color:var(--okInk);border-radius:12px;padding:10px 12px;margin-top:10px}
+.savebox .vn{margin:4px 0 0}
+#recTag{background:#CC4B37;color:#fff;border-radius:999px;padding:3px 10px;font-weight:800;font-size:12px;animation:pulse 1.6s ease-in-out infinite}

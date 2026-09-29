@@ -916,6 +916,9 @@
     LS.watchNudge(pid, v => { if (pid !== P.pid) return; if (v && v.at && v.at > (P.lastNudge || 0)) { P.lastNudge = v.at; saveLocal(); if (joined()) toast("From your teacher: " + v.text, 8000); } });
   }
 
+  /* ───────── the live camera (the teacher's phone), above the screen while the teacher shows it ───────── */
+  if (window.AWCAM) { const cb = el("div"); cb.id = "camBox"; $("#shell").insertBefore(cb, $("#app")); AWCAM.mount({ el: cb, kind: "laptop" }); }
+
   /* ───────── boot ───────── */
   setupDock();
   LS.onError(() => paintLive());

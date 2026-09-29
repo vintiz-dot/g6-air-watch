@@ -246,13 +246,24 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 
 ### During the lesson
 
-- **Next →** opens the next screen on every laptop, with its timer; **← Back** reopens the one before.
-  The run sheet shows the reveal buttons first, then your script for that screen and a planned cut
-  (**If you are behind**).
+- **Show on the projector** (top of the left column while the lesson runs) lists everything this screen
+  puts on the board, in the order of the run sheet: reveals, the Wonder Wall, the rule vote and
+  spotlights. The highlighted row is next — press **Tab** or click it. Green = ready; amber ★ = a pair’s
+  answer is ready for a spotlight (their card turns amber too, and a message pops up once); dashed =
+  waiting for the class; ✓ = on the board (click it to hide it again). Under each screen number in
+  **Screens**: ▶ reveal · W Wonder Wall · ★ spotlight. The top bar always says what Tab or Page Down does now.
+- **Presentation remote:** **Page Down** next screen · **Page Up** back · **Tab** the highlighted row ·
+  **B** (or **.**, the remote’s black-screen button) blanks the projector — the next key brings the
+  picture back. Before the bell, Page Down twice rings the bell; on screen 9, Page Down twice ends the
+  lesson. The keys work whether your page or the projector window is in front (open the projector with
+  **Projector ↗** so they can reach your page); short replies (“Press again…”, “Waiting for…”) show at
+  the bottom of the projector as well. **F5** is ignored on the projector so it stays full screen.
+- **Next →** and **← Back** do the same as Page Down and Page Up. The run sheet has your script for that
+  screen and a planned cut (**If you are behind**).
 - The badge at the top says when the lesson will finish if you keep every remaining timer. It turns red
   and says how much to cut if you are heading past 45:00.
-- **Reveal** buttons show answers on the laptops and the projector. **★ Spotlight** puts a pair’s
-  sentence on the projector (they see “Your work is on the board!”); **✕ End spotlight** in the top bar,
+- **Reveal** rows show answers on the laptops and the projector. **★ Spotlight** on a pair’s card puts
+  their sentence on the projector (they see “Your work is on the board!”); **✕ End spotlight** in the top bar,
   **Esc**, or a click on the projector takes it off. **Nudge** sends a private message to one laptop.
   **✓ Helped** clears a help request.
 - **Goals** (right column): the class score for the Science, Language and Thinking goals, from the
@@ -264,15 +275,17 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   exact page and question for that screen (p.30–34), with *We wrote it in our books* — then the challenge card.
 - Screen 2: each pair sees the questions both partners wrote at home and picks one to post. Under it,
   the laptops invite them to press **Suggest a change** if a task could work better for them.
-- Screen 3: after “60 seconds later”, press **Show how small PM2.5 is** — the EPA hair-and-sand picture
+- Screen 3: type the meter numbers in the **Show on the projector** box (they appear on the board as you
+  type). After “60 seconds later”, **Tab** → *Show how small PM2.5 is* — the EPA hair-and-sand picture
   appears on the laptops and the projector.
 - Screen 6: a short bridge before the graphs (laptops and projector): CO₂ is not in the AQI; at these
   levels it warms the planet rather than hurting lungs — a different problem, the same skill of reading
   a trend. The laptops show the pair’s whole week (and the class station); tapping a number fills
   “___ tells us that the AQI was ___ on ___”.
-- Screen 7: tick up to three rules → **Put the ticked rules to the vote** → **Close the vote** makes the
-  winner the class rule. The Wonder Wall is back (laptops and projector): *Which question can we answer
-  now? Which is still open?* Pairs tap the one they can answer now.
+- Screen 7: **Tab** spotlights up to three rules (the best ones first), then puts them to the vote (filled
+  up to three), then closes it — the winner is the class rule. Or tick rules in the run sheet → **Put the
+  ticked rules to the vote** → **Close the vote**. The Wonder Wall is back (laptops and projector):
+  *Which question can we answer now? Which is still open?* Pairs tap the one they can answer now.
 - Screen 8: every part of the plan (where, when, how often, compared with what) ends in **because…**.
   The four-step ladder (DOK 1 Recall → DOK 4 Design, level 3 is the target) is on the projector and
   on each laptop. In the peer check a part can be ticked only if it has a reason, and the reviewers
@@ -281,9 +294,10 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   asks them to confirm it). Then the pair types its best version, presses **Check our answers**, and
   marks each goal got it / partly / missed it. After “Hands up if you had both”, **each student** marks
   what they had in their own book — the run sheet and the observers' 3A.1 row count it in students.
-  They self-rate the three goals and finish **In E12 I will…**. Back to the Wonder Wall: each pair
-  posts one **sharper question** for E12 (it arrives in *Wonder questions* on your page, marked
-  *sharper*). Then press **Show the goals and self-ratings on the board**.
+  They self-rate the three goals and finish **In E12 I will…** → **Tab** → *Show the goals and
+  self-ratings*. Back to the Wonder Wall: each pair posts one **sharper question** for E12 (it arrives in
+  *Wonder questions* on your page, marked *sharper*); **Tab** puts them on the projector’s Wonder Wall,
+  and the next **Tab** spotlights one.
 - **After the bell — the print pack:** on your page, **Print pack — every student’s work (A5)** (in the
   session card). A new window shows one A5 half-page per student, two per A4 sheet (landscape), with a
   dashed cut line. Each student gets their group's answers under their own name, grouped by book page
@@ -292,7 +306,8 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   own Air Watch week for the table. A ☐ marks every answer that goes in the book. Press **Print / Save
   as PDF** → choose *Save as PDF* for a file, or print (A4, landscape, no margins). Long answers are
   set a little smaller so each student fits one half-page.
-- Keys: **N** next screen · **B** back · **P** pause/resume · **+** one more minute · **Esc** end the spotlight.
+- Keys: **Page Down** next · **Page Up** back · **Tab** show the next thing · **B** blank the projector ·
+  **P** pause/resume · **+** one more minute · **Esc** end the spotlight. (**B** no longer means back.)
 
 ### If something goes wrong
 

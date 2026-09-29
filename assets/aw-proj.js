@@ -244,8 +244,11 @@
           const mem = k => '<span><span class="gtag g-' + k + '">' + (k === "sci" ? "Science" : "Thinking") + '</span> from memory: <b>' + got(k) + '</b> of ' + L.length + ' pairs got it</span>';
           $("#gl").innerHTML = '<div class="pmem">' + mem("sci") + mem("think") + '</div><ul class="pgoals rated labelled">' + rows + '</ul>';
         } else $("#gl").innerHTML = '<p class="pq" style="font-size:1.4em">From memory first — do not look!</p><p style="margin:0 0 .4em">Write our <span class="gtag g-sci">Science</span> goal and our <span class="gtag g-think">Thinking</span> goal on your laptop.</p><p class="pnote">' + typed + ' of ' + L.length + ' pairs have checked their answers.</p>';
-        const sharp = Object.keys(QS).filter(k => QS[k] && QS[k].sharp).length;
-        $("#ww9").innerHTML = '<p class="pwq" style="font-size:.9em;margin:.6em 0 .2em">Wonder Wall: ' + esc(D.wonder.q) + '</p><p class="pnote" style="margin:0">' + wall().length + ' questions on the wall · ' + sharp + ' sharper ' + (sharp === 1 ? "question" : "questions") + ' posted for E12</p>';
+        const sharp = Object.keys(QS).filter(k => QS[k] && QS[k].sharp).length, sw = wall().filter(q => q.sharp);
+        const h9 = '<p class="pwq" style="font-size:.9em;margin:.6em 0 .2em">Wonder Wall: ' + esc(D.wonder.q) + '</p>' +
+          (sw.length ? '<div class="pwall one ww9">' + sw.slice(-3).map(q => '<div>' + esc(q.text) + '</div>').join("") + '</div>' : '') +
+          '<p class="pnote" style="margin:.2em 0 0">' + wall().length + ' questions on the wall · ' + sharp + ' sharper ' + (sharp === 1 ? "question" : "questions") + ' posted for E12</p>';
+        const w9 = $("#ww9"); if (w9.dataset.h !== h9) { w9.dataset.h = h9; w9.innerHTML = h9; }
         $("#nx").textContent = D.reflect.next;
       };
     }
@@ -291,6 +294,36 @@
   }
   $("#spot").addEventListener("click", () => { $("#spot").hidden = true; });
   document.addEventListener("keydown", e => { if (e.key === "Escape") $("#spot").hidden = true; });
+
+  /* ───────── a presentation remote pointed at this window ─────────
+     Page Down / Page Up / Tab / B (or .) are passed to the teacher's window, which does the work.
+     F5 is ignored here: reloading would drop the projector out of full screen. */
+  let BC = null; try { BC = new BroadcastChannel("aw_remote"); } catch (e) { BC = null; }
+  const RKEY = { PageDown: "PageDown", PageUp: "PageUp", Tab: "Tab", b: "blank", B: "blank", ".": "blank" };
+  document.addEventListener("keydown", e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "F5") { e.preventDefault(); return; }
+    const k = RKEY[e.key]; if (!k || (k === "Tab" && e.shiftKey)) return;
+    e.preventDefault(); if (e.repeat) return;
+    const m = { aw: "remote", key: k, to: k === "blank" ? !ST.blank : undefined };
+    try {
+      if (BC) BC.postMessage(m);
+      else if (window.opener && !window.opener.closed) window.opener.postMessage(m, location.origin);
+      else hint("Open this display from the teacher page (Projector ↗) so the remote can reach it.", 4000);
+    } catch (x) {}
+  });
+  /* short answers from the teacher's window: "press again to ring the bell", "waiting for…" */
+  const hintBox = document.createElement("div"); hintBox.className = "phint"; hintBox.hidden = true; document.body.appendChild(hintBox);
+  let hintT = null;
+  function hint(msg, ms) {
+    clearTimeout(hintT);
+    if (!msg) { hintBox.hidden = true; return; }
+    hintBox.textContent = msg; hintBox.hidden = false;
+    hintT = setTimeout(() => { hintBox.hidden = true; }, ms || 3500);
+  }
+  const onHint = d => { if (d && d.aw === "hint") hint(d.msg, d.ms); };
+  if (BC) BC.addEventListener("message", ev => onHint(ev.data));
+  window.addEventListener("message", ev => { if (ev.origin === location.origin) onHint(ev.data); });
   function paintStage() {
     const mode = !ST.reset ? "none" : ST.live === false ? "ended" : !ST.startedAt ? "before" : "s" + (ST.screen || 1);
     const key = mode + ":" + (ST.reset || "");
@@ -299,7 +332,7 @@
   }
   const queued = {};
   function later(name, fn, ms) { if (queued[name]) return; queued[name] = setTimeout(() => { queued[name] = null; try { fn(); } catch (e) { console.error(e); } }, ms || 150); }
-  const all = () => { paintTop(); paintStage(); paintBot(); paintSpot(); };
+  const all = () => { document.body.classList.toggle("blank", !!ST.blank); paintTop(); paintStage(); paintBot(); paintSpot(); };
 
   /* the class station's live number, every 10 minutes */
   function pollAqi() {

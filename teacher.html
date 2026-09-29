@@ -13,6 +13,8 @@
 </head>
 <body class="teach">
 <div id="bar"><span id="mark">TOS</span><div id="barTitle">Lesson 6 · teacher</div>
+  <span class="barnext" id="barNext" hidden title="What Tab (or Page Down) does now — see “Show on the projector”"></span>
+  <span class="blankb" id="blankB" hidden title="The projector shows a black screen. Press B (or the remote’s blank button) to bring it back.">Projector blank · press B</span>
   <span class="tclock" id="lclock">Lesson <b>–:–</b></span>
   <span class="tclock" id="tclock">Screen <b>–:–</b></span>
   <span class="projbadge" id="projb" hidden></span>
@@ -22,6 +24,7 @@
 </div>
 <main id="shell"><div id="app"></div></main>
 <div id="live"><span class="d"></span><span id="livetx">Connecting…</span></div>
+<div id="ttoast" role="status" aria-live="polite" hidden></div>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
 <script src="assets/aw-config.js"></script>

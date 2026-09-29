@@ -10,6 +10,8 @@
 
   let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, METER = {}, EVENTS = {}, HOMEWORK = {}, HWCFG = {}, FLAGS = {};
   let connected = null, builtFor = null, sessMode = null, projWin = null;
+  const TID = Math.random().toString(36).slice(2);
+  let BC = null; try { BC = new BroadcastChannel("aw_remote"); } catch (e) { BC = null; }
   let LOC = {}; try { LOC = JSON.parse(localStorage.getItem("aw_teach_local") || "{}") || {}; } catch (e) { LOC = {}; }
   const saveLoc = () => { try { localStorage.setItem("aw_teach_local", JSON.stringify(LOC)); } catch (e) {} };
   const scr = n => D.screens[(n || 1) - 1];
@@ -40,7 +42,8 @@
       '<div class="tgrid">' +
         '<div class="tleft">' +
           '<div class="card" id="sess"></div>' +
-          '<div class="card"><h3>Screens <small>44 min + 1 to close = 45</small></h3><div class="steps" id="steps"></div><div class="stepnow" id="stepNow"></div><div class="tctrl" id="tctrl"></div><div class="navrow"><button class="btn ghost" id="backBtn" type="button" hidden>← Back</button><button class="btn g bigbtn" id="nextBtn" type="button" hidden></button></div></div>' +
+          '<div class="card" id="scrCard"><h3>Screens <small>44 min + 1 to close = 45</small></h3><div class="steps" id="steps"></div><div class="stepnow" id="stepNow"></div><div class="tctrl" id="tctrl"></div><div class="navrow"><button class="btn ghost" id="backBtn" type="button" hidden>← Back</button><button class="btn g bigbtn" id="nextBtn" type="button" hidden></button></div></div>' +
+          '<div class="card showcard" id="showCard"></div>' +
           '<div class="card" id="run"></div>' +
         '</div>' +
         '<div class="tmid"><div class="card"><div class="pairhead" id="phead"></div><div class="pairs" id="pairs"></div></div></div>' +
@@ -54,6 +57,17 @@
     $("#openProj").onclick = () => { projWin = window.open("projector.html", "aw_projector", "popup=yes,width=1280,height=720"); later("sess", paintSessionDyn, 500); };
     $("#openObs").onclick = () => window.open("observer.html", "_blank");
     document.addEventListener("keydown", keys);
+    /* keys pressed on the projector window come here: only the teacher window used last acts on them */
+    const fromProj = d => {
+      if (!d || d.aw !== "remote") return;
+      let act = null; try { act = localStorage.getItem("aw_teach_active"); } catch (e) {}
+      if (act && act !== TID) return;
+      remote(d.key, d.to);
+    };
+    if (BC) BC.onmessage = ev => fromProj(ev.data);
+    window.addEventListener("message", ev => { if (ev.origin === location.origin) fromProj(ev.data); });
+    const claim = () => { try { localStorage.setItem("aw_teach_active", TID); } catch (e) {} };
+    window.addEventListener("focus", claim); document.addEventListener("pointerdown", claim, true); claim();
     const fit = () => {
       const wide = window.innerWidth >= 1281;
       document.body.classList.toggle("cockpit", wide);
@@ -67,13 +81,13 @@
     LS.onError(paintLive);
     LS.watchConnected(v => { connected = v; paintLive(); later("sess", paintSessionDyn, 200); });
     LS.watchState(s => { ST = s || {}; onState(); later("goals", paintGoals, 300); });
-    LS.watchPairs(v => { PAIRS = v || {}; later("goals", paintGoals, 800); later("pairs", paintPairs, 250); later("run", paintRunLive, 300); later("rules", paintRules, 300); later("targets", paintTargets, 900); later("sess", paintSessionDyn, 400); });
-    LS.watchQuestions(v => { QS = v || {}; later("voice", paintVoice, 200); later("targets", paintTargets, 900); later("run", paintRunLive, 300); });
+    LS.watchPairs(v => { PAIRS = v || {}; later("show", paintShow, 250); later("goals", paintGoals, 800); later("pairs", paintPairs, 250); later("run", paintRunLive, 300); later("rules", paintRules, 300); later("targets", paintTargets, 900); later("sess", paintSessionDyn, 400); });
+    LS.watchQuestions(v => { QS = v || {}; later("show", paintShow, 150); later("voice", paintVoice, 200); later("targets", paintTargets, 900); later("run", paintRunLive, 300); });
     LS.watchSuggestions(v => { SUGG = v || {}; later("voice", paintVoice, 200); later("targets", paintTargets, 900); });
     LS.watchFeedback(v => { FB = v || {}; later("run", paintRunLive, 300); later("targets", paintTargets, 900); });
-    LS.watchVotes(v => { VOTES = v || {}; later("run", paintRunLive, 200); later("rules", paintRules, 200); });
+    LS.watchVotes(v => { VOTES = v || {}; later("show", paintShow, 200); later("run", paintRunLive, 200); later("rules", paintRules, 200); });
     LS.watchMeter(v => { METER = v || {}; paintMeterInputs(); later("run", paintRunLive, 200); later("sess", paintSessionDyn, 300); });
-    LS.watchEvents(v => { EVENTS = v || {}; later("goals", paintGoals, 600); later("log", paintLog, 300); later("targets", paintTargets, 900); });
+    LS.watchEvents(v => { EVENTS = v || {}; later("show", paintShow, 300); later("goals", paintGoals, 600); later("log", paintLog, 300); later("targets", paintTargets, 900); });
     LS.watchHomework(v => { HOMEWORK = v || {}; later("photos", paintAllPhotos, 300); later("sess", paintSessionDyn, 300); later("pairs", paintPairs, 300); later("run", paintRunLive, 300); });
     LS.watchHomeworkConfig(v => { HWCFG = v || {}; later("sess", paintSessionDyn, 300); });
     LS.watchPhotoFlags(v => { FLAGS = v || {}; later("photos", paintAllPhotos, 300); });
@@ -93,8 +107,9 @@
     paintSession();
     paintSteps();
     const key = (ST.reset || "") + ":" + cur();
-    if (builtFor !== key) { builtFor = key; buildRun(); }
-    else { paintRevealBtns(); paintRunLive(); paintRules(); paintAllPhotos(); paintSpotCtl(); }
+    if (builtFor !== key) { builtFor = key; buildRun(); buildShow(); const tl = $(".tleft"); if (tl && document.body.classList.contains("cockpit")) tl.scrollTop = 0; }
+    else { paintShow(); paintRunLive(); paintRules(); paintAllPhotos(); paintSpotCtl(); }
+    const bb = $("#blankB"); if (bb) bb.hidden = !ST.blank;
     later("pairs", paintPairs, 80); later("targets", paintTargets, 500); later("voice", paintVoice, 200);
     tick();
   }
@@ -124,7 +139,12 @@
   /* ───────── session card ───────── */
   function paintSession() {
     const mode = !ST.reset ? "none" : ST.live === false ? "ended" : ST.startedAt ? "running" : "before";
-    if (mode !== sessMode) { sessMode = mode; buildSession(mode); }
+    if (mode !== sessMode) {
+      sessMode = mode; buildSession(mode);
+      /* while the lesson runs, "Show on the projector" leads the column and the session card goes to the bottom */
+      const tl = $(".tleft");
+      if (tl) (mode === "running" ? ["showCard", "scrCard", "run", "sess"] : ["sess", "scrCard", "showCard", "run"]).forEach(id => { const e = document.getElementById(id); if (e) tl.appendChild(e); });
+    }
     paintSessionDyn();
   }
   function buildSession(mode) {
@@ -198,7 +218,7 @@
   function openScreen(n) {
     if (!ST.reset) return;
     const t = now();
-    LS.setState({ screen: n, screenAt: t, timerEnd: ST.startedAt && ST.live !== false ? t + scr(n).min * 60000 : null, pausedLeft: null, spot: null });
+    LS.setState({ screen: n, screenAt: t, timerEnd: ST.startedAt && ST.live !== false ? t + scr(n).min * 60000 : null, pausedLeft: null, spot: null, blank: null });
     LS.logEvent("screen", { n });
   }
   function plus1() {
@@ -217,18 +237,19 @@
     const box = $("#steps"); box.innerHTML = "";
     D.screens.forEach(s => {
       const b = el("button", "step1 ph-" + s.phase.toLowerCase() + (s.n === n ? " cur" : "") + (seen[s.n] && s.n !== n ? " seen" : ""),
-        '<span class="n">' + s.n + '</span><span class="mm">' + s.min + '′</span>');
-      b.type = "button"; b.title = s.n + " · " + s.name + " — " + s.phase + ", " + s.min + " min, planned from " + PLAN.startOf(s.n) + "′. Click to open it on every laptop.";
+        '<span class="n">' + s.n + '</span><span class="mm">' + s.min + '′</span><span class="mk">' + marks(s.n) + '</span>');
+      b.type = "button"; b.title = s.n + " · " + s.name + " — " + s.phase + ", " + s.min + " min, planned from " + PLAN.startOf(s.n) + "′. Show: " + seqSummary(s.n) + ". Click to open it on every laptop.";
       b.onclick = () => openScreen(s.n);
       box.appendChild(b);
     });
     const sc = scr(n);
-    $("#stepNow").innerHTML = (ST.reset ? '<b>Now: ' + n + ' · ' + esc(sc.name) + '</b> <span class="vn">' + esc(sc.phase) + ' · planned ' + PLAN.startOf(n) + '′–' + (PLAN.startOf(n) + sc.min) + '′</span>' : '');
+    $("#stepNow").innerHTML = '<div class="mklegend">Under each number: <i class="m r">▶</i> reveal · <i class="m w">W</i> Wonder Wall · <i class="m s">★</i> spotlight</div>' +
+      (ST.reset ? '<b>Now: ' + n + ' · ' + esc(sc.name) + '</b> <span class="vn">' + esc(sc.phase) + ' · planned ' + PLAN.startOf(n) + '′–' + (PLAN.startOf(n) + sc.min) + '′</span>' : '');
     const tc = $("#tctrl"); tc.innerHTML = "";
     if (ST.startedAt && ST.live !== false) {
       const T = U.timer(ST, now());
       [["+1 min", plus1], [T && T.paused ? "▶ Resume" : "❚❚ Pause", T && T.paused ? resume : pause], ["↺ " + scr(n).min + " min again", restart]].forEach(([l, f]) => { const b = el("button", "btn sm ghost", l); b.type = "button"; b.onclick = f; tc.appendChild(b); });
-      tc.appendChild(el("span", "vn", "Keys: N next · B back · P pause · + minute · Esc end spotlight")).style.fontSize = "11px";
+      tc.appendChild(el("span", "vn", "Keys: P pause · + one minute · Esc end the spotlight")).style.fontSize = "11px";
     }
     const bb = $("#backBtn"), pv = D.screens[n - 2];
     bb.hidden = !ST.reset || !ST.startedAt || ST.live === false || !pv;
@@ -239,15 +260,59 @@
     else { nb.hidden = false; nb.textContent = "Next → " + nx.n + " · " + nx.name + " (" + nx.min + " min)"; nb.onclick = () => openScreen(nx.n); }
   }
   function keys(e) {
-    const tag = (e.target && e.target.tagName) || "";
-    if (/INPUT|TEXTAREA|SELECT/.test(tag) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target && e.target.tagName) || "", typing = /INPUT|TEXTAREA|SELECT/.test(tag), k = e.key;
+    /* a presentation remote: Page Down / Page Up / Tab work even while a box has the cursor (not inside the nudge box) */
+    if (k === "PageDown" || k === "PageUp" || (k === "Tab" && !e.shiftKey && !$("#pop"))) {
+      e.preventDefault(); if (e.repeat) return;
+      if (typing && e.target.blur) e.target.blur();
+      remote(k); return;
+    }
+    if (typing) return;
+    if (k === "b" || k === "B" || k === ".") { e.preventDefault(); if (!e.repeat) remote("blank"); return; }
+    if (k === "Escape") { if (ST.spot) LS.setState({ spot: null }); closePop(); return; }
     if (!ST.startedAt || ST.live === false) return;
-    if (e.key === "n" || e.key === "N") { const nx = D.screens[cur()]; if (nx) openScreen(nx.n); }
-    else if (e.key === "b" || e.key === "B") { const pv = D.screens[cur() - 2]; if (pv) openScreen(pv.n); }
-    else if (e.key === "p" || e.key === "P") { ST.pausedLeft != null ? resume() : pause(); }
-    else if (e.key === "+" || e.key === "=") plus1();
-    else if (e.key === "Escape") { if (ST.spot) LS.setState({ spot: null }); closePop(); }
+    if (k === "n" || k === "N") goNext();
+    else if (k === "p" || k === "P") { ST.pausedLeft != null ? resume() : pause(); }
+    else if (k === "+" || k === "=") plus1();
   }
+  function remote(k, to) {
+    if (k === "blank") {
+      if (!ST.reset) { toastT("Start a session first (session card).", 0, true); return; }
+      const on = to == null ? !ST.blank : !!to;
+      LS.setState({ blank: on || null }); LS.logEvent("blank", { on, n: cur() }); return;
+    }
+    /* while the projector is blank, the first press only brings the picture back */
+    if (ST.blank && (k === "PageDown" || k === "PageUp" || k === "Tab")) { LS.setState({ blank: null }); LS.logEvent("blank", { on: false, n: cur() }); toastT("Projector back on — press again to go on."); return; }
+    if (k === "PageDown") goNext();
+    else if (k === "PageUp") goBack();
+    else if (k === "Tab") runNext();
+  }
+  /* the first and the last step need a second press within 4 seconds */
+  let armedWhat = null, armedAt = 0;
+  function armed(what) { const t = Date.now(); if (armedWhat === what && t - armedAt < 4000) { armedWhat = null; return true; } armedWhat = what; armedAt = t; return false; }
+  function goNext() {
+    if (!ST.reset) { toastT("Start a session first (session card).", 0, true); return; }
+    if (ST.live === false) { toastT("The lesson has ended.", 0, true); return; }
+    if (!ST.startedAt) { if (armed("bell")) { LS.bell(scr(1).min); hideToast(); } else toastT("Press Page Down again to ring the bell and start the 45 minutes.", 4000, true); return; }
+    const nx = D.screens[cur()];
+    if (nx) { openScreen(nx.n); return; }
+    if (armed("end")) { LS.endSession(); hideToast(); } else toastT("This is the last screen. Press Page Down again to end the lesson.", 4000, true);
+  }
+  function goBack() {
+    if (!ST.reset || !ST.startedAt || ST.live === false) { toastT(ST.live === false ? "The lesson has ended." : "The lesson has not started.", 0, true); return; }
+    const pv = D.screens[cur() - 2]; if (pv) openScreen(pv.n); else toastT("This is screen 1 — there is no screen before it.", 0, true);
+  }
+  /* a message on the laptop; `proj` also shows it small on the projector (for someone holding the remote) */
+  let toastT_ = null;
+  function toastT(msg, ms, proj, cls) {
+    const t = $("#ttoast"); if (!t) return;
+    t.textContent = msg; t.className = cls || ""; t.hidden = false; t.onclick = () => { t.hidden = true; };
+    clearTimeout(toastT_); toastT_ = setTimeout(() => { t.hidden = true; }, ms || 4500);
+    if (proj) toProj({ aw: "hint", msg, ms: Math.min(ms || 3500, 4000) });
+  }
+  function hideToast() { const t = $("#ttoast"); if (t) t.hidden = true; toProj({ aw: "hint", msg: "" }); }
+  function toProj(m) { try { if (BC) BC.postMessage(m); else if (projWin && !projWin.closed) projWin.postMessage(m, location.origin); } catch (e) {} }
 
   /* ───────── run sheet for the current screen ───────── */
   function buildRun() {
@@ -262,30 +327,209 @@
       li.querySelector("input").onchange = e => { did[i] = e.target.checked; li.classList.toggle("did", did[i]); saveLoc(); };
       $("#script").appendChild(li);
     });
-    const ctl = $("#ctl"), rev = el("div", "rev");
-    const add = (k, l) => rev.appendChild(revealBtn(k, l));
-    if (n === 2) { add("guess", "Reveal the guess score"); add("photos", "Reveal the photo numbers"); }
-    if (n === 3) { add("pred", "Show the class predictions"); add("size", "Show how small PM2.5 is"); }
-    if (n === 4) { add("sort", "Reveal the sort answers"); add("q1q2", "Reveal Q1, Q2 & language answers"); }
-    if (n === 6) add("dbq", "Reveal the DBQ answers");
-    if (n === 8) add("q3", "Reveal the Q3 answer");
-    if (n === 9) { add("shift", "Show before → after"); add("goals", "Show the goals and self-ratings on the board"); }
-    if (rev.children.length) ctl.appendChild(rev);
+    const ctl = $("#ctl");
     if (n === 2) { const d = el("details", "setupbox", '<summary><b>Photo game</b> <span class="vn">' + (ST.photos || []).length + ' of 3 chosen</span></summary><div class="photobox"></div>'); d.open = !(ST.photos || []).length; ctl.appendChild(d); mountPhotos(d.querySelector(".photobox")); }
-    if (n === 3) { const m = el("div", "meterbox"); ctl.appendChild(m); mountMeter(m, "r"); }
     if (n === 7) ctl.appendChild(el("div", "", '<div id="ruleList"></div>'));
     paintSpotCtl();
     paintRunLive();
     paintRules();
     tick();
   }
-  function revealBtn(key, label) {
-    const b = el("button", "chip"); b.type = "button"; b.dataset.rev = key; b.dataset.label = label;
-    b.onclick = () => { const v = !(ST.reveal && ST.reveal[key]); LS.setState({ ["reveal/" + key]: v }); if (v) LS.logEvent("reveal", { what: key, n: cur() }); };
-    paintOneReveal(b); return b;
+  /* ───────── show on the projector: this screen's steps, in the order of the script ─────────
+     Tab (or a remote's Tab key) runs the highlighted step · Page Down / Page Up change the screen ·
+     B or . blanks the projector. The same keys pressed on the projector window are passed here. */
+  const REV = {
+    guess: ["Reveal the guess score", "How often our eyes were right, for the whole class"],
+    photos: ["Reveal the photo numbers", "The AQI under each sky photo"],
+    pred: ["Show the class predictions", "The split for both questions"],
+    size: ["Show how small PM2.5 is", "The EPA hair-and-sand picture, on the laptops too"],
+    sort: ["Reveal the sort answers", "✓ and ✗ on every card"],
+    q1q2: ["Reveal Q1, Q2 & language answers", "Marks on the laptops, % right on the projector"],
+    dbq: ["Reveal the DBQ answers", "B and D (cause and effect) for DBQ1, A for DBQ2"],
+    q3: ["Reveal the Q3 answer", "A, B and C"],
+    shift: ["Show before → after", "How the class answer changed since the start"],
+    goals: ["Show the goals and self-ratings", "The recall count and the class ratings"]
+  };
+  const SEQ = {
+    1: [],
+    2: [["rev", "guess"], ["rev", "photos"], ["wall"], ["spot", 1], ["spot", 2]],
+    3: [["rev", "pred"], ["rev", "size"], ["spot", 1]],
+    4: [["rev", "sort"], ["spot", 1], ["rev", "q1q2"]],
+    5: [["spot", 1]],
+    6: [["rev", "dbq"], ["spot", 1]],
+    7: [["spot", 1], ["spot", 2], ["spot", 3], ["vote"], ["close"], ["wall"]],
+    8: [["rev", "q3"], ["spot", 1]],
+    9: [["rev", "shift"], ["rev", "goals"], ["wall"], ["spot", 1]]
+  };
+  const SPOTWHY = { 2: "a question to investigate", 3: "explains with the meter number", 4: "names harm and amount", 5: "says what the AQI shows and hides",
+    6: "a number with its source", 7: "no place name — true for any city", 8: "a reason in every part", 9: "a sharper question for E12" };
+  const NOSHOW = { 1: "Nothing to show on this screen — silent start. The class vote stays hidden until screen 9." };
+  const marks = n => { const q = SEQ[n] || [], has = k => q.some(x => x[0] === k);
+    return (has("rev") || has("vote") ? '<i class="m r">▶</i>' : "") + (has("wall") ? '<i class="m w">W</i>' : "") + (has("spot") ? '<i class="m s">★</i>' : "") || '<i class="m">·</i>'; };
+  function seqSummary(n) {
+    const q = SEQ[n] || [], parts = [], spots = q.filter(x => x[0] === "spot").length;
+    q.forEach(([k, a]) => { if (k === "rev") parts.push(REV[a][0].replace(/^(Reveal|Show) /, "").replace(/^the /, "")); if (k === "wall") parts.push("the Wonder Wall"); if (k === "vote") parts.push("the rule vote"); });
+    if (spots) parts.push(spots === 1 ? "a spotlight" : spots + " spotlights");
+    return parts.length ? parts.join(" · ") : "nothing to show";
   }
-  function paintOneReveal(b) { const on = !!(ST.reveal && ST.reveal[b.dataset.rev]); b.classList.toggle("on", on); b.textContent = (on ? "✓ " : "") + b.dataset.label + (on ? " (on)" : ""); }
-  function paintRevealBtns() { $$("[data-rev]").forEach(paintOneReveal); }
+  const gc = id => (E.goalChecks.find(c => c.id === id) || {}).test || (() => null);
+  const spottedOn = n => ((LOC.spotted || {})[n] || []);
+  /* what is worth a spotlight on screen n: the pairs' own answers that meet the screen's check first */
+  function spotCands(n) {
+    const done = new Set(spottedOn(n).map(x => x.key));
+    const ever = new Set(E.evList(EVENTS).filter(e => e.kind === "spot" && e.pid).map(e => e.pid));
+    const out = [];
+    if (n === 2 || n === 9) Object.keys(QS).forEach(id => {
+      const q = QS[id]; if (!q || !txt(q.text) || q.ok === false || !!q.sharp !== (n === 9)) return;
+      const p = PAIRS[q.pid]; if (!p) return;
+      const good = n === 9 || !!q.starter || /measur|compar|how could we know|what if/i.test(q.text);
+      out.push({ key: "q:" + id, pid: q.pid, st: p.st, kind: n === 9 ? "Our sharper question for E12" : "Our question", text: txt(q.text), why: good ? SPOTWHY[n] : "", score: (good ? 10 : 0) + (q.ok === true ? 2 : 0) });
+    });
+    if (n !== 2) E.pairs(PAIRS).forEach(p => {
+      const a = (p.a || {})["s" + n] || {};
+      if (n === 9) { if (txt(a.exit)) out.push({ key: p.pid, pid: p.pid, st: p.st, kind: "Why we need to talk about air quality", text: txt(a.exit), why: "", score: 1 }); return; }
+      const sp = spotText(n, a); if (!sp) return;
+      let good = false;
+      if (n === 3) good = gc("s3")(a) === true;
+      if (n === 4) { const r = E.frameText(D.focus.rule, a.rule, 2); good = /harm|hurt|damag|danger|bad for|sick|ill|disease/i.test(r) && /enough|amount|much|level|lot|many/i.test(r); }
+      if (n === 5) good = gc("l5")(a) === true;
+      if (n === 6) good = gc("l6")(a) === true;
+      if (n === 7) good = gc("t7")(a) === true;
+      if (n === 8) good = E.reasons(a) >= 4;
+      out.push({ key: p.pid, pid: p.pid, st: p.st, kind: sp[0], text: sp[1], why: good ? SPOTWHY[n] : "", score: (good ? 10 : 0) + (n === 8 ? E.reasons(a) : 0) });
+    });
+    return out.filter(c => !done.has(c.key)).map(c => Object.assign(c, { score: c.score + (ever.has(c.pid) ? 0 : 2) })).sort((x, y) => y.score - x.score || x.st - y.st);
+  }
+  function showActions(n) {
+    const out = [], cands = spotCands(n), L = E.pairs(PAIRS), N = L.length;
+    let ci = 0;
+    (SEQ[n] || []).forEach(([kind, arg]) => {
+      if (kind === "rev") {
+        const on = !!(ST.reveal && ST.reveal[arg]), [label, sub] = REV[arg];
+        if (arg === "photos" && !(ST.photos || []).length) { out.push({ kind, rev: arg, label, sub: "No photos chosen — choose three in the run sheet below", state: "skip" }); return; }
+        out.push({ kind, rev: arg, label, sub: on ? "On the projector now — click to hide it again" : sub, state: on ? "done" : "ready", run: () => reveal(arg, true), click: () => reveal(arg, !on) });
+        return;
+      }
+      if (kind === "wall") {
+        const sharp = n === 9, what = sharp ? "sharper question" : "question";
+        const qs = Object.keys(QS).map(id => Object.assign({ id }, QS[id])).filter(q => q && txt(q.text) && !!q.sharp === sharp);
+        const fresh = qs.filter(q => q.ok == null), on = qs.filter(q => q.ok === true), asked = new Set(qs.map(q => q.pid)).size;
+        if (fresh.length) out.push({ kind, label: "Wonder Wall: put " + fresh.length + " new " + what + (fresh.length === 1 ? "" : "s") + " on the wall", sub: fresh.slice(0, 2).map(q => "“" + txt(q.text) + "”").join(" · ") + (fresh.length > 2 ? " …" : ""), state: "ready",
+          run: () => { fresh.forEach(q => LS.flagQuestion(q.id, true)); LS.setState({ spot: null }); LS.logEvent("wall", { n, k: fresh.length }); } });
+        else if (on.length) out.push({ kind, label: "Wonder Wall: " + on.length + " " + what + (on.length === 1 ? "" : "s") + " on the wall", sub: n === 7 ? "On the projector: “Which question can we answer now? Which is still open?”" : "To take one down: Wonder questions → Hide (right column)", state: "done" });
+        else out.push({ kind, label: "Wonder Wall", sub: "Waiting for " + what + "s — " + asked + " of " + N + " pairs have posted", state: "wait" });
+        return;
+      }
+      if (kind === "spot") {
+        const done = spottedOn(n);
+        if (done.length >= arg) { const d = done[arg - 1]; out.push({ kind, label: "★ Spotlight — station " + d.st, sub: "“" + d.text + "”", state: "done" }); return; }
+        if (n === 7 && ST.ruleVote && ST.ruleVote.items) { out.push({ kind, label: "★ Spotlight", sub: "Skipped — the vote has started", state: "skip" }); return; }
+        const c = cands[ci++];
+        if (!c) { out.push({ kind, label: "★ Spotlight", sub: "Waiting for a pair’s answer on this screen", state: "wait" }); return; }
+        out.push({ kind, cand: c, spot: true, label: "★ Spotlight station " + c.st + (c.why ? " — " + c.why : ""), sub: "“" + c.text + "”", state: "ready", run: () => spotCand(c) });
+        return;
+      }
+      if (kind === "vote") {
+        const rv = ST.ruleVote && ST.ruleVote.items ? ST.ruleVote : null;
+        if (rv) { out.push({ kind, label: "Rules put to the vote (" + rv.items.length + ")", sub: rv.items.map((it, i) => "ABC"[i] + ". " + it.text).join(" · "), state: "done" }); return; }
+        const picks = votePicks();
+        if (!picks.length) { out.push({ kind, label: "Put three rules to the vote", sub: "Waiting for rules — " + L.filter(p => ((p.a || {}).s7 || {}).submitted).length + " of " + N + " pairs have sent one", state: "wait" }); return; }
+        out.push({ kind, label: "Put " + (picks.length === 1 ? "this rule" : "these " + picks.length + " rules") + " to the vote", sub: picks.map(p => "St " + p.st + ": “" + txt(((p.a || {}).s7 || {}).rule) + "”").join(" · "), state: "ready", run: () => startVote(picks) });
+        return;
+      }
+      if (kind === "close") {
+        const rv = ST.ruleVote && ST.ruleVote.items ? ST.ruleVote : null;
+        if (!rv) { out.push({ kind, label: "Close the vote → class rule", sub: "After the vote opens", state: "wait" }); return; }
+        if (rv.open === false) { out.push({ kind, label: "Class rule chosen", sub: ST.classRule ? "“" + ST.classRule.text + "”" : "", state: "done" }); return; }
+        const c = votesFor("rule"), tot = Object.values(c).reduce((a, v) => a + v, 0);
+        out.push({ kind, label: "Close the vote → the winner is the class rule", sub: tot + " of " + N + " pairs have voted", state: "ready", run: closeVote });
+      }
+    });
+    if (ST.spot) out.push({ kind: "clear", label: "End the spotlight", sub: "“" + (ST.spot.text || "") + "” — station " + ST.spot.st, state: "ready", run: () => LS.setState({ spot: null }) });
+    return out;
+  }
+  function reveal(key, on) { const patch = { ["reveal/" + key]: !!on }; if (on) { patch.spot = null; patch.blank = null; } LS.setState(patch); if (on) LS.logEvent("reveal", { what: key, n: cur() }); }
+  function spotCand(c) {
+    const p = Object.assign({ pid: c.pid }, PAIRS[c.pid] || { st: c.st, names: [] });
+    spotlight(p, c.kind, c.text, c.key);
+  }
+  /* the rules for the vote: the ones ticked or spotlighted first, then the best of the rest up to three
+     (no place name first, one per frame) */
+  function votePicks() {
+    const L = E.pairs(PAIRS).filter(p => { const a = (p.a || {}).s7 || {}; return a.submitted && txt(a.rule); });
+    const byPid = pid => L.find(p => p.pid === pid);
+    const picks = (LOC.pick7 || []).map(byPid).filter(Boolean).slice(0, 3);
+    const ranked = L.map(p => ({ p, good: gc("t7")(p.a.s7) === true ? 1 : 0, f: p.a.s7.frame || "" })).sort((x, y) => (y.good - x.good) || x.p.st - y.p.st);
+    const seen = new Set(picks.map(p => p.a.s7.frame || ""));
+    ranked.forEach(r => { if (picks.length < 3 && !picks.includes(r.p) && !seen.has(r.f)) { picks.push(r.p); seen.add(r.f); } });
+    ranked.forEach(r => { if (picks.length < 3 && !picks.includes(r.p)) picks.push(r.p); });
+    return picks;
+  }
+  function startVote(picks) {
+    const items = picks.map(p => ({ pid: p.pid, st: p.st, text: txt(((p.a || {}).s7 || {}).rule) })).filter(x => x.text);
+    if (!items.length) return;
+    LS.clearVotes("rule");
+    LS.setState({ ruleVote: { items, open: true, at: now() }, classRule: null, spot: null });
+    LS.logEvent("vote", { n: 7, k: items.length });
+  }
+  /* Tab: the highlighted step */
+  function runNext() {
+    if (!ST.reset) { toastT("Start a session first (session card).", 0, true); return; }
+    if (!ST.startedAt) { toastT("The lesson has not started: press Page Down twice to ring the bell.", 0, true); return; }
+    if (ST.live === false) { toastT("The lesson has ended — the print pack is in the session card.", 0, true); return; }
+    const acts = showActions(cur()), i = acts.findIndex(x => x.state === "ready" || x.state === "wait");
+    if (i < 0) { const nx = D.screens[cur()]; toastT(nx ? "Nothing more to show on this screen. Page Down → " + nx.n + " · " + nx.name + "." : "Nothing more to show. Page Down twice ends the lesson.", 0, true); return; }
+    const a = acts[i];
+    if (a.state === "wait") { toastT(waitMsg(a), 0, true); flashRow(i); return; }
+    a.run(); flashRow(i);
+  }
+  const waitMsg = a => /^waiting/i.test(a.sub || "") ? a.sub : "Waiting — " + (a.sub || a.label);
+  function flashRow(i) { const b = document.querySelector('#shList .sact[data-i="' + i + '"]'); if (!b) return; b.classList.add("sa-flash"); setTimeout(() => b.classList.remove("sa-flash"), 900); }
+  /* the panel: built when the screen changes, the list repainted as the class works */
+  function buildShow() {
+    const box = $("#showCard"); if (!box) return;
+    const n = cur(), s = scr(n);
+    box.className = "card showcard ph-" + s.phase.toLowerCase();
+    box.innerHTML = '<div class="shhead"><b>Show on the projector</b><span id="shWhere"></span></div><div id="shList"></div><div id="shExtra"></div><p class="shnext" id="shNext"></p>' +
+      '<p class="shkeys">Remote or keyboard: <kbd>Page Down</kbd> next screen · <kbd>Page Up</kbd> back · <kbd>Tab</kbd> the highlighted step · <kbd>B</kbd> blank the projector</p>';
+    $("#shList").onclick = e => {
+      const b = e.target.closest(".sact"); if (!b) return;
+      const a = showActions(cur())[+b.dataset.i]; if (!a) return;
+      if (ST.blank && (a.click || (a.state === "ready" && a.run))) LS.setState({ blank: null });
+      if (a.click) a.click(); else if (a.state === "ready" && a.run) a.run(); else if (a.state === "wait") toastT(waitMsg(a));
+      flashRow(+b.dataset.i);
+    };
+    /* screen 3: the meter numbers go straight onto the projector as they are typed */
+    if (n === 3) { const m = el("div", "meterbox"); $("#shExtra").appendChild(m); mountMeter(m, "r"); }
+    paintShow();
+  }
+  let lastNudge = "";
+  function paintShow() {
+    const box = $("#showCard"); if (!box || !$("#shList")) return;
+    const n = cur(), running = ST.reset && ST.startedAt && ST.live !== false;
+    $("#shWhere").textContent = "screen " + n + " · " + scr(n).name;
+    const acts = showActions(n), nextI = running ? acts.findIndex(x => x.state === "ready" || x.state === "wait") : -1;
+    const rows = acts.map((a, i) => '<button type="button" class="sact sa-' + a.state + (i === nextI ? " sa-next" : "") + (a.spot ? " sa-spot" : "") + '" data-i="' + i + '"' + (a.rev ? ' data-rev="' + a.rev + '"' : '') + '>' +
+      '<span class="sno">' + (a.state === "done" ? "✓" : i + 1) + '</span><span class="tx"><b>' + esc(a.label) + '</b>' + (a.sub ? '<small>' + esc(a.sub) + '</small>' : '') + '</span>' +
+      (i === nextI ? '<span class="kk">' + (a.state === "wait" ? "waiting" : "Tab") + '</span>' : '') + '</button>').join("");
+    const html = !ST.startedAt ? '<p class="shnone">Before the bell. <kbd>Page Down</kbd> twice (or <b>▶ Bell</b> in the session card) starts the 45 minutes.</p>'
+      : ST.live === false ? '<p class="shnone">The lesson has ended. The print pack is in the session card.</p>'
+      : acts.length ? '<div class="shlist">' + rows + '</div>' : '<p class="shnone">' + esc(NOSHOW[n] || "Nothing to show on this screen.") + '</p>';
+    const L = $("#shList"); if (L.dataset.h !== html) { L.dataset.h = html; L.innerHTML = html; }
+    const nx = D.screens[n];
+    $("#shNext").innerHTML = running && nx ? '<b>Next · ' + nx.n + ' ' + esc(nx.name) + ':</b> ' + esc(seqSummary(nx.n)) : '';
+    /* the top bar always says what Tab or Page Down does now */
+    const bn = $("#barNext");
+    if (bn) {
+      const a = nextI >= 0 ? acts[nextI] : null;
+      bn.hidden = !ST.reset || ST.live === false;
+      bn.className = "barnext" + (a && a.state === "wait" ? " wait" : a && a.spot ? " bspot" : "");
+      bn.textContent = !ST.startedAt ? "Page Down twice ▸ ring the bell" : a ? (a.state === "wait" ? "Waiting · " + a.label : "Tab ▸ " + a.label) : nx ? "Page Down ▸ " + nx.n + " · " + nx.name : "Page Down twice ▸ end the lesson";
+    }
+    /* something worth a spotlight has just appeared: say so once */
+    const a = nextI >= 0 ? acts[nextI] : null;
+    if (a && a.spot && a.state === "ready") { const k = (ST.reset || "") + ":" + n + ":" + nextI; if (k !== lastNudge) { lastNudge = k; toastT("★ Ready to spotlight: station " + a.cand.st + (a.cand.why ? " — " + a.cand.why : "") + ". Press Tab (or click the amber row).", 7000, false, "tspot"); } }
+  }
   function paintSpotCtl() {
     const box = $("#spotCtl"); if (!box) return;
     if (!ST.spot) { box.innerHTML = ""; return; }
@@ -475,14 +719,21 @@
     }
     return null;
   }
-  function spotlight(p, kind, text) {
-    LS.setState({ spot: { kind, text, st: p.st, names: p.names.join(" & "), pid: p.pid, at: now() } });
-    LS.logEvent("spot", { pid: p.pid, st: p.st, n: cur(), what: kind, text });
+  function spotlight(p, kind, text, key) {
+    const names = E.arr(p.names).filter(Boolean), n = cur();
+    LS.setState({ spot: { kind, text, st: p.st, names: names.join(" & "), pid: p.pid, at: now() }, blank: null });
+    LS.logEvent("spot", { pid: p.pid, st: p.st, n, what: kind, text });
+    LOC.spotted = LOC.spotted || {};
+    const list = LOC.spotted[n] = LOC.spotted[n] || [], k = key || p.pid;
+    if (!list.some(x => x.key === k)) list.push({ key: k, pid: p.pid, st: p.st, text: String(text || "").slice(0, 160) });
+    if (n === 7 && ((p.a || {}).s7 || {}).submitted) { LOC.pick7 = (LOC.pick7 || []).filter(x => x !== p.pid); LOC.pick7.push(p.pid); if (LOC.pick7.length > 3) LOC.pick7.shift(); }
+    saveLoc(); later("show", paintShow, 60); later("rules", paintRules, 60);
   }
   function paintPairs() {
     const box = $("#pairs"); if (!box) return;
     if (document.querySelector("#pop")) return; /* keep the grid still while a nudge menu is open */
     const n = cur(), L = E.pairs(PAIRS), t = now(), cx = ctx();
+    const sugg = new Set(); if (ST.startedAt && ST.live !== false) showActions(n).forEach(a => { if (a.spot && a.state === "ready") sugg.add(a.cand.pid); });
     const byS = {}; L.forEach(p => (byS[p.st] = byS[p.st] || []).push(p));
     const cards = [];
     for (let s = 1; s <= NST; s++) { if (!byS[s]) cards.push({ empty: s }); else byS[s].forEach(p => cards.push({ p, dup: byS[s].length > 1 })); }
@@ -493,9 +744,9 @@
       const p = c.p, a = (p.a || {})["s" + n] || {}, pr = E.progress(n, a, cx);
       const done = p.done && p.done[n], help = p.help, lastT = a.t || 0, opened = ST.screenAt || 0;
       const idle = !done && !help && ST.startedAt && ST.live !== false && t - opened > 60000 && t - Math.max(lastT, opened) > 90000;
-      const card = el("div", "pair" + (done ? " done" : "") + (help ? " help" : "") + (idle ? " idle" : ""));
+      const card = el("div", "pair" + (done ? " done" : "") + (help ? " help" : "") + (idle ? " idle" : "") + (sugg.has(p.pid) ? " suggest" : ""));
       card.innerHTML = '<div class="ph"><span class="stn">' + p.st + '</span><span class="who">' + esc(p.names.join(" & ")) + '<small>' + (c.dup ? "⚠ two laptops on station " + p.st : lastT ? "last typed " + U.ago(t - lastT) + " ago" : "joined " + clock(p.joined)) + '</small></span>' +
-        (help ? '<span class="flag hp">HELP · ' + U.ago(t - help) + '</span>' : done ? '<span class="flag dn">✓ done</span>' : idle ? '<span class="flag id">quiet</span>' : '') + '</div>' +
+        (help ? '<span class="flag hp">HELP · ' + U.ago(t - help) + '</span>' : sugg.has(p.pid) ? '<span class="flag sg">★ spotlight?</span>' : done ? '<span class="flag dn">✓ done</span>' : idle ? '<span class="flag id">quiet</span>' : '') + '</div>' +
         '<div class="prog" title="' + pr.got + ' of ' + pr.of + ' parts"><i style="width:' + U.pct(pr.got, pr.of) + '%"></i></div>' +
         '<div class="sum">' + E.summary(n, p, cx) + '</div>' +
         (ST.startedAt ? '<div class="pg">' + E.pairGoals(p, ST).map(x => x.of ? '<span class="gtag sm g-' + x.k + '" title="' + esc(x.short) + ' checks met so far">' + esc(x.short[0]) + ' ' + x.met + '/' + x.of + '</span>' : '').join("") + '</div>' : '') +
@@ -503,7 +754,7 @@
       const acts = card.querySelector(".acts");
       const nb = el("button", "btn ghost", "Nudge ▾"); nb.type = "button"; nb.onclick = ev => { ev.stopPropagation(); nudgeMenu(nb, p); }; acts.appendChild(nb);
       const sp = spotText(n, a);
-      const sb = el("button", "btn ghost", "★ Spotlight"); sb.type = "button"; sb.disabled = !sp; if (sp) sb.title = sp[1];
+      const sb = el("button", "btn " + (sugg.has(p.pid) ? "sgb" : "ghost"), "★ Spotlight"); sb.type = "button"; sb.disabled = !sp; if (sp) sb.title = sp[1];
       sb.onclick = () => sp && spotlight(p, sp[0], sp[1]); acts.appendChild(sb);
       if (help) { const hb = el("button", "btn g", "✓ Helped"); hb.type = "button"; hb.onclick = () => { LS.setHelp(p.pid, false); LS.logEvent("helped", { pid: p.pid, st: p.st, n }); }; acts.appendChild(hb); }
       box.appendChild(card);
@@ -557,7 +808,7 @@
       qs.forEach(q => {
         const it = el("div", "vitem" + (q.ok === true ? " ok" : q.ok === false ? " hid" : ""), '<div class="meta">Station ' + esc(stOf(q.pid)) + ' · ' + clock(q.at) + (q.sharp ? " · sharper question (screen 9)" : "") + (q.ok === true ? " · on the wall" : q.ok === false ? " · hidden" : " · new") + '</div>' + esc(q.text) + '<div class="acts"></div>');
         const acts = it.querySelector(".acts");
-        [["✓ Wall", () => LS.flagQuestion(q.id, true)], ["Hide", () => LS.flagQuestion(q.id, false)], ["★ Spotlight", () => { const p = PAIRS[q.pid] || { st: "?", names: [] }; spotlight(Object.assign({ pid: q.pid }, p), "Our question", q.text); }]]
+        [["✓ Wall", () => LS.flagQuestion(q.id, true)], ["Hide", () => LS.flagQuestion(q.id, false)], ["★ Spotlight", () => { const p = PAIRS[q.pid] || { st: "?", names: [] }; spotlight(Object.assign({ pid: q.pid }, p), q.sharp ? "Our sharper question for E12" : "Our question", q.text, "q:" + q.id); }]]
           .forEach(([l, f]) => { const b = el("button", "btn ghost", l); b.type = "button"; b.onclick = f; acts.appendChild(b); });
         list.appendChild(it);
       });
@@ -621,6 +872,8 @@
       case "reopen": return "Lesson re-opened";
       case "end": return "Lesson ended";
       case "pack": return "Print pack opened";
+      case "wall": return "Wonder Wall: " + e.k + " question" + (e.k === 1 ? "" : "s") + " put up";
+      case "blank": return e.on ? "Projector blanked" : "Projector back on";
     }
     return e.kind;
   }

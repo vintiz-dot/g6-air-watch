@@ -516,3 +516,66 @@ details.ladder li.target i{color:var(--okInk);opacity:.85}
 .pwall.one{grid-template-columns:1fr}
 .packrow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin:10px 0 4px}
 .packrow .vn{font-size:12px}
+/* ── teacher: "Show on the projector" — this screen's reveals, Wonder Wall and spotlights, in order ── */
+.tgrid .card.showcard{padding:0;overflow:hidden;border:2px solid var(--ph,var(--ink))}
+.shhead{background:var(--ph,var(--ink));color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.shhead b{font-family:var(--display);font-size:16px;letter-spacing:.02em}
+.shhead span{font-size:12px;font-weight:600;opacity:.92;text-align:right}
+.shlist{display:flex;flex-direction:column;gap:6px;padding:10px}
+.sact{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border:1.5px solid var(--line);background:var(--card);color:var(--text);border-radius:12px;padding:9px 10px;font:inherit;cursor:pointer;transition:transform .12s}
+.sact:hover{border-color:var(--ink)}
+.sact .sno{flex:none;width:26px;height:26px;border-radius:50%;background:var(--soft);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+.sact .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.sact .tx b{font-size:14.5px;line-height:1.25}
+.sact .tx small{font-size:12.5px;color:var(--muted);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sact.sa-ready .sno{background:var(--ink);color:var(--card)}
+.sact.sa-spot.sa-ready .sno{background:var(--amber);color:#1B1200}
+.sact.sa-done{background:var(--soft);opacity:.7}
+.sact.sa-done .sno{background:var(--green);color:#fff}
+.sact.sa-wait{border-style:dashed}
+.sact.sa-skip{opacity:.5;cursor:default}
+.sact.sa-next{border-color:var(--green);background:var(--okBg);animation:nextglow 1.8s ease-in-out infinite}
+.sact.sa-next .tx b{color:var(--okInk)}
+.sact.sa-next.sa-spot{border-color:var(--amber);background:var(--warnBg);animation-name:spotglow}
+.sact.sa-next.sa-spot .tx b{color:var(--warnInk)}
+.sact.sa-next.sa-wait{border-color:var(--muted);background:var(--soft);animation:none}
+.sact.sa-next.sa-wait .tx b{color:var(--text)}
+@keyframes nextglow{0%,100%{box-shadow:0 0 0 2px var(--okBg)}50%{box-shadow:0 0 0 6px var(--okBg)}}
+@keyframes spotglow{0%,100%{box-shadow:0 0 0 2px var(--warnBg)}50%{box-shadow:0 0 0 6px var(--warnBg)}}
+.sact .kk{flex:none;align-self:center;font-weight:800;font-size:12px;letter-spacing:.03em;border-radius:7px;padding:3px 9px;background:var(--green);color:#fff;box-shadow:0 2px 0 rgba(0,0,0,.28)}
+.sact.sa-next.sa-spot .kk{background:var(--amber);color:#1B1200}
+.sact.sa-next.sa-wait .kk{background:transparent;color:var(--muted);box-shadow:none;border:1px dashed var(--muted);font-weight:700}
+.sact.sa-flash{animation:actflash .9s ease-out}
+@keyframes actflash{0%{transform:scale(.97)}35%{transform:scale(1.01);background:#FFF3C4}100%{transform:none}}
+.shnone{margin:0;padding:12px;font-size:14px;color:var(--muted);line-height:1.45}
+#shExtra{padding:0 12px 6px}
+#shExtra:empty{display:none}
+.shnext{margin:0;padding:0 12px 8px;font-size:12.5px;color:var(--muted);line-height:1.4}
+.shnext:empty{display:none}
+.shkeys{margin:0;padding:7px 12px 8px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.9}
+kbd{font:700 11px var(--body);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 5px;background:var(--card);color:var(--text);white-space:nowrap}
+/* which screens have something to show: marks under the step numbers */
+.step1 .mk{display:flex;gap:1px;min-height:13px;font-size:10px;line-height:13px}
+.m{font-style:normal;font-weight:800;color:var(--line)}
+.m.r{color:var(--teal)} .m.w{color:var(--generalize)} .m.s{color:var(--amber)}
+.mklegend{font-size:11px;color:var(--muted);margin:0 0 4px}
+.mklegend .m{font-size:11px}
+/* top bar: what Tab / Page Down does now, and a warning while the projector is blank */
+.barnext{background:#2E9E6B;color:#fff;font-weight:700;font-size:13px;border-radius:999px;padding:5px 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw;min-width:0;flex:0 1 auto}
+.barnext.wait{background:#35586B;color:#CFE4EE}
+.blankb{background:#000;color:#fff;border:1.5px solid #fff;font-weight:800;font-size:12px;border-radius:999px;padding:4px 10px;white-space:nowrap;animation:pulse 1.2s ease-in-out infinite}
+#ttoast{position:fixed;left:50%;top:62px;transform:translateX(-50%);z-index:120;max-width:min(680px,92vw);background:var(--deep);color:#fff;border-radius:14px;padding:12px 18px;font-size:16px;font-weight:600;line-height:1.35;box-shadow:0 12px 32px rgba(0,0,0,.35);text-align:center}
+#ttoast.tspot{background:#C8871B;color:#1B1200}
+/* a pair whose answer is ready for a spotlight */
+.pair.suggest{border-color:var(--amber);box-shadow:0 0 0 3px var(--warnBg)}
+.pair .flag.sg{background:var(--amber);color:#1B1200}
+/* projector: black screen (B), and short answers to the remote */
+body.proj.blank{cursor:none}
+body.proj.blank::after{content:"";position:fixed;inset:0;background:#000;z-index:200}
+.phint{position:fixed;left:50%;bottom:3.4em;transform:translateX(-50%);z-index:96;background:rgba(8,23,31,.9);color:#fff;border-radius:999px;padding:.45em 1.1em;font-size:.8em;font-weight:600;max-width:80vw;text-align:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.shlist .sact.sa-flash,.shlist .sact.sa-next.sa-flash{animation:actflash .9s ease-out}
+.pwall.ww9{gap:.3em;margin:.2em 0}
+.pwall.ww9 div{font-size:.78em;padding:.3em .6em}
+.pair .acts .btn.sgb{background:var(--amber);color:#1B1200}
+#ttoast{cursor:pointer}
+.barnext.bspot{background:#C8871B;color:#1B1200}

@@ -1,18 +1,23 @@
 /* Air Watch lesson — the live camera on the teacher's phone (cam.html?k=KEY, opened from the QR code on the
-   teacher's page). While it is live:
-   · direct video (WebRTC) to the teacher's laptop — projector and preview — when the phone and the laptop
-     can reach each other (best: the laptop on the phone's hotspot). Smooth, about 30 frames a second.
-   · pictures to the lesson room for the laptops and the observers (and as a fallback): about 4 a second while
-     the teacher shows it on the screens, one every 2 seconds otherwise.
-   · a video recorded on the phone; Stop → Save the video. */
+   teacher's page). First the teacher chooses how the class sees the jar test:
+   · Live video (VDO.Ninja, free, no account): this page writes cam/<key> = { mode: "ninja" } and opens the
+     VDO.Ninja camera page (back camera, 720p, one stream to VDO.Ninja's relay). Every screen plays it; the
+     teacher's laptop records it (teacher page → ● Record on this laptop). Safari's Back button comes back here.
+   · Pictures + record on this phone (the backup). While it is live:
+     · direct video (WebRTC) to the teacher's laptop — projector and preview — when the phone and the laptop
+       can reach each other (best: the laptop on the phone's hotspot). Smooth, about 30 frames a second.
+     · pictures to the lesson room for the laptops and the observers (and as a fallback): about 4 a second
+       while the teacher shows it on the screens, one every 2 seconds otherwise.
+     · a video recorded on the phone; Stop → Save the video. */
 (function () {
   "use strict";
-  const { U, LS } = window.AWL;
+  const { U, LS, NINJA } = window.AWL;
   const { $, esc } = U;
   const key = (new URLSearchParams(location.search).get("k") || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24);
   let ST = {}, stateSeen = false, connected = null;
   let stream = null, live = false, seq = 0, inFlight = 0, lastSent = 0, acks = [], sizes = [];
   let rec = null, chunks = [], recStart = 0, recType = "", clip = null, wake = null, camErr = "", starting = false;
+  let mode = null;   /* null: choose · "ninja": opening VDO.Ninja · "pics": pictures + record here */
   const canvas = document.createElement("canvas"), cx = canvas.getContext("2d");
   /* WebP where the browser can make it (smaller for the same quality), JPEG otherwise (iPhone) */
   const PIC = (() => { try { const c = document.createElement("canvas"); c.width = c.height = 2; return c.toDataURL("image/webp", 0.6).indexOf("data:image/webp") === 0 ? "image/webp" : "image/jpeg"; } catch (e) { return "image/jpeg"; } })();
@@ -57,6 +62,7 @@
       return;
     }
     m.hidden = true; main.hidden = false;
+    if (!live && !stream && mode !== "pics") { paintChoice(); return; }
     $("#cvbox").hidden = !stream;
     $("#cvlive").hidden = !live;
     $("#recTag").hidden = !rec;
@@ -64,8 +70,9 @@
     $("#crecl").hidden = !stream || live || !window.MediaRecorder;
     const b = $("#cbtns"); b.innerHTML = "";
     if (!stream) {
-      $("#chint").innerHTML = "Stand the phone where it sees the jar <b>and</b> the meter, sideways (landscape). Plug it in if you can.";
+      $("#chint").innerHTML = "<b>Pictures + record on this phone.</b> Stand the phone where it sees the jar <b>and</b> the meter, sideways (landscape). Plug it in if you can.";
       b.appendChild(btn(starting ? "Starting the camera…" : "Turn on the camera", "g big", startCamera));
+      b.appendChild(btn("← Live video instead", "ghost sm", () => { mode = null; paint(); }));
     } else if (!live) {
       $("#chint").innerHTML = "Check the picture: the jar and the meter’s number should both be in it.";
       b.appendChild(btn($("#crec").checked && window.MediaRecorder ? "● Start: live + record" : "● Start live", "g big", start));
@@ -76,6 +83,39 @@
     paintStat();
     paintSave();
   }
+  /* the choice: live video through VDO.Ninja, or pictures from this page */
+  function paintChoice() {
+    $("#cvbox").hidden = true; $("#crecl").hidden = true; $("#cerr").textContent = camErr;
+    $("#cstat").textContent = ""; paintSave();
+    const b = $("#cbtns"); b.innerHTML = "";
+    if (mode === "ninja") {
+      $("#chint").innerHTML = "<b>Opening VDO.Ninja…</b> When Safari asks, allow the camera. Hold the phone sideways; the video starts by itself.";
+      const a = document.createElement("a"); a.className = "btn g big"; a.href = NINJA.push(key); a.textContent = "Open VDO.Ninja";
+      b.appendChild(a);
+      b.appendChild(btn("← Back", "ghost sm", () => { mode = null; paint(); }));
+      return;
+    }
+    $("#chint").innerHTML = "How should the class see the jar test?";
+    const mk = (cls, title, sub, fn) => { const x = document.createElement("button"); x.type = "button"; x.className = "camchoice " + cls; x.innerHTML = "<b>" + title + "</b><span>" + sub + "</span>"; x.onclick = fn; b.appendChild(x); };
+    mk("best", "▶ Live video (VDO.Ninja)", "Smooth video on the projector, every laptop and the observers. Record it on your laptop: teacher page → ● Record on this laptop.", goNinja);
+    mk("backup", "Pictures + record on this phone", "The backup — use it if the live video does not show at school.", goPics);
+  }
+  function goNinja() {
+    if (mode === "ninja") return;
+    mode = "ninja"; camErr = ""; paint();
+    let went = false;
+    const go = () => { if (went || mode !== "ninja") return; went = true; location.href = NINJA.push(key); };
+    LS.camFrame(key, { mode: "ninja", at: LS.now(), seq: ++seq }).then(go);
+    setTimeout(go, 2500);
+  }
+  function goPics() {
+    mode = "pics"; camErr = "";
+    LS.camFrame(key, { mode: "pics", at: LS.now(), seq: ++seq });
+    paint();
+  }
+  /* Safari's Back button from VDO.Ninja: show the choice again */
+  window.addEventListener("pageshow", e => { if (e.persisted && mode === "ninja") { mode = null; paint(); } });
+
   function paintStat() {
     const s = $("#cstat"); if (!s) return;
     if (!live) { s.textContent = ""; return; }

@@ -15,7 +15,8 @@ Two parts, one folder:
 | `teacher.html` | your laptop (PIN) | Runs the lesson: screens and timers, reveals, spotlight, private nudges, student ideas, rule vote, the three goal scores, live targets. |
 | `projector.html` | the projector | Class results only: timer, the three goal scores, votes, charts, Wonder Wall, spotlight. Opened from `teacher.html`. |
 | `observer.html` | observers’ laptop | Read-only: every pair’s live work, the three goals measured as the lesson goes, planned vs actual time, and the evidence for each framework component. |
-| `cam.html` | your phone | **Live camera** for the jar test: opened from the QR code on `teacher.html`; sends about 3 pictures a second to the projector, the laptops and the observers while you show it, and records a video on the phone. |
+| `cam.html` | your phone | **Live camera** for the jar test, opened from the QR code on `teacher.html`. **Live video (VDO.Ninja)** sends smooth video to the projector, the laptops and the observers; the backup, **Pictures + record on this phone**, sends about 4 pictures a second and records on the phone. |
+| `rec.html` | your laptop | **Records the live video** on your laptop (opened by **● Record on this laptop**); the file goes to Downloads. |
 
 Teacher PIN: the `teacherPin` in `assets/aw-config.js`.
 
@@ -244,8 +245,9 @@ two links to students. **Start a new session** on `teacher.html` clears the less
 4. Press **Projector ↗**, drag the window onto the projector, then press **Full screen on the
    projector** (Chrome and Edge can send it to the projector by themselves; allow the permission if asked).
    **Live camera:** open **Live camera (your phone)** in *Show on the projector*, scan the QR code with
-   your phone (see *Live camera* below), and stand the phone at the jar before the bell.
-5. In **Before the bell**: type the meter’s room reading and choose three sky photos (★ starred ones come first).
+   your iPhone → **Live video (VDO.Ninja)** (see *Live camera* below), stand the phone at the jar, and
+   check that your preview shows the video. Then **● Record on this laptop** → **Start recording** → **Allow**.
+5. In **Before the bell**: type the meter’s room reading and choose up to six sky photos, A–F (★ starred ones come first).
 6. At 9:40 press **▶ Bell**. The 45 minutes and the screen-1 timer start.
 
 ### During the lesson
@@ -277,8 +279,19 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   *Talk first — then type*: the Navigator says it, the Pilot types what the Navigator said.
 - **Finished early?** When a pair presses *We're done*, the laptop sends them to their book first — the
   exact page and question for that screen (p.30–34), with *We wrote it in our books* — then the challenge card.
-- Screen 2: each pair sees the questions both partners wrote at home and picks one to post. Under it,
-  the laptops invite them to press **Suggest a change** if a task could work better for them.
+  **Spotlight a challenge answer:** **★ Challenge** on the pair’s card, or click a teal **★ Challenge —
+  station N** row in *Show on the projector* (Tab never picks these, so your planned steps stay the same).
+  The projector shows the challenge question above their answer.
+- Screen 2: the photo game shows up to six photos (A–F); each pair votes for the worst sky. Each pair sees
+  the questions both partners wrote at home and can post **up to three** questions (the box clears after
+  each one, and they see their list with *3 of 3 posted*). Until you put a question on the wall they can
+  **Take back** one to fix it. Under it, the laptops invite them to press **Suggest a change** if a task
+  could work better for them.
+- **The Wonder Wall** on the projector shows every question in full: the text shrinks to fit its box;
+  when there are too many for a readable size it shows them a page at a time and turns the page every
+  8 seconds (*36 questions · page 1 of 4*). Right after you put questions on the wall (screens 2, 7 and 9),
+  **Tab** → *Show the whole Wonder Wall (full screen)*: every question, big. The next **Tab** (a
+  spotlight), **Esc**, or a click on the projector closes it. The laptops list every question too.
 - Screen 3: **Tab** → the class predictions; **Tab** → *Show the live camera on every screen* (if the
   phone is live). Type the meter numbers in the **Show on the projector** box — they appear on the board and
   on the camera view as you type. After “60 seconds later”, **Tab** → *Show how small PM2.5 is*: the EPA
@@ -312,32 +325,41 @@ two links to students. **Start a new session** on `teacher.html` clears the less
   as PDF** → choose *Save as PDF* for a file, or print (A4, landscape, no margins). Long answers are
   set a little smaller so each student fits one half-page.
 - Keys: **Page Down** next · **Page Up** back · **Tab** show the next thing · **B** blank the projector ·
-  **P** pause/resume · **+** one more minute · **Esc** end the spotlight. (**B** no longer means back.)
+  **P** pause/resume · **+** one more minute · **Esc** end the spotlight (or close the full Wonder Wall). (**B** no longer means back.)
 
 ### Live camera (the jar test from your phone)
 
+- **What the class sees:** smooth live video from your iPhone on the projector, every laptop and the
+  observers’ page, through **VDO.Ninja** (free, no account, nothing to install). The phone sends one
+  stream to VDO.Ninja’s free relay (Meshcast) and every screen plays it in the camera box, with the meter
+  numbers on top — about half a second behind.
 - **Set up (before the bell):** on your page, *Show on the projector* → **Live camera (your phone)** →
-  scan the QR code with the phone’s camera (iPhone: it opens in Safari; Android: Chrome) → **Turn on the
-  camera** → allow it. Stand the phone sideways where it sees the jar **and** the meter’s number, plugged
-  in if you can, then press **● Start: live + record**. Only your laptop’s preview shows it for now.
-- **Smooth video on the projector:** connect your laptop to the **phone’s hotspot** (iPhone: Settings →
-  Personal Hotspot → Allow Others to Join; Android: Settings → Hotspot & tethering) before you open the
-  camera. The phone then sends real video straight to your laptop — the projector and your preview show
-  **LIVE · VIDEO**, and the box on your page says **direct video ✓**. Your laptop’s internet goes through
-  the phone for the lesson (the lesson itself uses very little). If it says *pictures only*, the direct
-  link did not connect: everything still works, with pictures.
-- **Show it:** on screen 3, **Tab** → *Show the live camera on every screen* (or the **Show on every
-  screen** button). The projector shows the direct video; the laptops (and the observers, unless their
-  laptop is also on the hotspot) get about 4 pictures a second, about 1 second behind. Students can tap it
-  to make it bigger. The meter numbers you type are shown on it.
-- **Hide it:** the size picture (Tab), **Hide from the screens**, or moving to another screen.
-- **Stop on the phone** at the end → **Save the video** (iPhone: *Save Video* puts it in Photos; Android:
-  it goes to Downloads). The video is only on that page until you save it — keep the page open and the
-  phone unlocked while it records.
-- The pictures use about 1 Mbps of the school internet per laptop while shown (about 12 Mbps for the class)
-  and almost nothing when hidden. If the Wi-Fi is slow a laptop gets fewer pictures, never old ones. As a
-  hotspot, the phone sends them over its mobile data (about 1 Mbps); the direct video to your laptop uses no
-  data.
+  scan the QR code with the iPhone’s camera (it opens in Safari) → **▶ Live video (VDO.Ninja)** → allow
+  the camera. Stand the phone sideways where it sees the jar **and** the meter’s number, plugged in if you
+  can. Set **Settings → Display & Brightness → Auto-Lock → Never** for the lesson: a locked phone or
+  another app stops the video. Your preview in the camera box shows the video — only you see it for now.
+- **Record it on your laptop:** **● Record on this laptop** (camera box) opens a window with the live
+  video → **● Start recording** → the browser asks to share this tab → **Allow** (Chrome or Edge). Leave
+  that window open — other windows can go on top of it. Your page shows **● Recording 1:23**; press
+  **■ Stop and save the recording** there (or in the window). The video goes to your **Downloads** folder
+  (`jar-test-2026-09-30-0952.mp4`, or `.webm`).
+- **Show it:** on screen 3, **Tab** → *Show the live camera on every screen* (or **Show on every
+  screen**). Students can tap it to make it bigger.
+- **Hide it:** the size picture (Tab), **Hide from the screens**, or moving to another screen. Hidden, the
+  screens use no data.
+- **If the live video does not show** (for example the school Wi-Fi blocks VDO.Ninja): on the phone press
+  Safari’s **Back** button → **Pictures + record on this phone** → **Turn on the camera** → **● Start:
+  live + record**. Every screen switches to pictures by itself (about 4 a second, about 1 second behind)
+  and the phone records the video: **■ Stop** → **Save the video** (iPhone: *Save Video* puts it in
+  Photos). With pictures, a laptop on the phone’s hotspot also gets direct video (**direct video ✓**).
+- **Try it before the day** (5 minutes): start a session, scan the QR code, choose Live video, and check
+  your preview; then open `index.html` on one more device and show the camera. At school before 9:30, do
+  the same on one student laptop — that tells you whether the school Wi-Fi lets VDO.Ninja through.
+- **Data:** while shown, each screen downloads the video (about 2–3 Mbps; about 30–40 Mbps for the whole
+  class); the phone sends one stream over its Wi-Fi or mobile data. VDO.Ninja’s free relay has
+  “fair use” limits and no guarantee — the pictures are the backup. The video passes through VDO.Ninja’s
+  servers and is not kept there; the stream name comes from this class’s secret camera key. Film the jar,
+  not the students.
 - The link stays the same when you start a new session. If the phone ever says the link is old, scan the
   QR code again.
 

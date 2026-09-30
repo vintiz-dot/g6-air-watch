@@ -671,3 +671,69 @@ body.camphone #shell{max-width:720px}
 .cv-preview .cvpic video{max-height:170px}
 .camview.direct .cvlive::after{content:" · VIDEO"}
 .camtip{margin:6px 0 0;font-size:12.5px;line-height:1.4}
+
+/* ───────── live video through VDO.Ninja (camera views) ───────── */
+.cvninja{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;z-index:1}
+.cvhit{position:absolute;inset:0;z-index:2}
+.camview.ninja .cvpic img,.camview.ninja .cvpic video{display:none}
+.camview.ninja .cvwait{display:block;top:50%;bottom:auto;transform:translateY(-50%);z-index:0;color:#9FC4D4}
+.camview.ninja .cvlive::after{content:" · VIDEO"}
+/* the phone: the choice */
+.camchoice{display:block;width:100%;text-align:left;border-radius:14px;padding:14px 16px;margin:0 0 10px;border:2px solid var(--line);background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+.camchoice b{display:block;font-size:19px;margin-bottom:4px;color:var(--ink)}
+.camchoice span{display:block;font-size:14px;line-height:1.4;color:var(--muted)}
+.camchoice.best{border-color:var(--green);background:var(--okBg)}
+.camchoice.best b{color:var(--okInk)}
+.camcard .btns a.btn.big{display:block;width:100%;text-align:center;text-decoration:none}
+/* the recorder window (rec.html) */
+body.recpage{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:#0B1419;color:#fff}
+#rbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 14px;background:#132630;font-size:14px}
+#rbar .rtitle{font-family:var(--display);font-size:17px}
+#rbar .btn{margin:0}
+#rstat{flex:1 1 320px;color:#CFE4EE}
+#rstat b{color:#fff}
+#rstat .rrec{color:#FF8A8A;margin-right:6px}
+#rstat .rerr{color:#FFC76B;font-weight:700}
+#rstage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:6px}
+#rframe{position:relative;width:min(100%,calc((100vh - 72px) * 16 / 9));aspect-ratio:16/9;background:#000}
+#rframe .rwait{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;margin:0;color:#9FC4D4;font-weight:600}
+body.recpage.recording #rframe{outline:3px solid #D7263D}
+.recline{margin:6px 0 0}
+.recline.on b{color:#D7263D}
+.btn.recstop{background:#D7263D;color:#fff}
+/* fixed-height camera boxes keep their height when the player (absolutely placed) fills them */
+#camBox:not(.big) .cvpic,#ocam .cvpic,.cv-preview .cvpic{flex:none}
+/* the photo game with four to six photos: two rows on the projector */
+.pphotos.two{gap:.5em}
+.pphotos.two .L{font-size:1.2em}
+.pphotos.two figcaption{padding:.2em .5em}
+/* the Wonder Wall: every question in full — the box fills its card; the text shrinks to fit, then pages */
+.pcard > .pwall{flex:1 1 auto;min-height:0}
+#ww9{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+#ww9 .pwall{flex:1 1 auto;min-height:0}
+.pwall div{overflow-wrap:anywhere}
+.pwall div.sharp{box-shadow:inset .3em 0 0 var(--teal)}
+/* the whole wall, full screen on the projector */
+#pwallbig{position:fixed;left:0;right:0;top:0;bottom:0;z-index:84;background:var(--paper);padding:.9em 1.6em 1em;display:flex;flex-direction:column}
+#pwallbig[hidden]{display:none}
+#pwallbig .wbhead{display:flex;align-items:baseline;gap:.4em 1em;flex-wrap:wrap;margin:0 0 .5em}
+#pwallbig .wbhead b{font-family:var(--display);font-size:1.5em;color:var(--ink)}
+#pwallbig .wbq{font-weight:700;color:var(--ink)}
+#pwallbig .wbn{margin-left:auto;color:var(--muted);font-weight:600;font-size:.85em}
+#pwallbig .pwall{flex:1 1 auto;min-height:0;grid-template-columns:repeat(auto-fill,minmax(13em,1fr));gap:.45em .6em;align-content:start}
+#pwallbig .pwall div{font-size:.9em;line-height:1.28}
+/* a challenge answer in the spotlight: the challenge question above it */
+.spot > div.ch{border-top-color:var(--teal)}
+.spot > div.ch .k{color:var(--teal)}
+.spot .q{font-weight:600;color:var(--muted);font-size:1em;line-height:1.35;margin:.35em 0 0;max-width:60em}
+/* challenge answers in the Show panel: click to spotlight (never on Tab) */
+.sact.sa-extra{border-color:var(--teal);border-style:solid}
+.sact.sa-extra .sno{background:var(--teal);color:#fff}
+.btn.chb{border-color:var(--teal);color:var(--teal)}
+/* screen 2: the pair's posted questions */
+.qcount{font-family:var(--body);font-weight:600;color:var(--muted);font-size:.7em;margin-left:.4em}
+ol.myqs{margin:8px 0 4px;padding-left:1.4em}
+ol.myqs li{margin:0 0 6px;padding:6px 8px;border:1px solid var(--line);border-radius:10px;background:var(--soft);display:flex;align-items:center;gap:8px;justify-content:space-between}
+ol.myqs li span{flex:1;min-width:0}
+ol.myqs .qon{color:var(--okInk);background:var(--okBg);border-radius:999px;padding:2px 8px;font-size:12px;white-space:nowrap}
+ol.myqs .btn{margin:0;flex:none}

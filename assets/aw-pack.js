@@ -101,7 +101,8 @@
     const planTxt = D.transfer.plan.filter(([k]) => txt(plan[k])).map(([k, l]) => '<div class="sub"><b>' + esc(l.split("?")[0].replace(/ would.*| do you.*/i, "").trim().toLowerCase().replace(/^./, c => c.toUpperCase())) + ':</b> ' + esc(txt(plan[k])) + (txt(why[k]) ? ' <b>because</b> ' + esc(txt(why[k])) : ' <span class="miss">(no reason)</span>') + '</div>').join("");
     const lv = fb && fb.level && D.transfer.ladder[fb.level - 1];
     const e12 = page("E12", "", [
-      item("Our question:", q(s2.q) + (txt(s9.sharp) ? ' · sharper: “' + esc(txt(s9.sharp)) + '”' : ""), false),
+      (() => { const mine = arr(s2.qs).filter(x => x && txt(x.t)).map(x => txt(x.t)), all = mine.length ? mine : txt(s2.q) ? [txt(s2.q)] : [];
+        return item(all.length > 1 ? "Our questions:" : "Our question:", (all.length ? all.map(x => q(x)).join(" · ") : miss) + (txt(s9.sharp) ? ' · sharper: “' + esc(txt(s9.sharp)) + '”' : ""), false); })(),
       item("Our plan to fix our week:", planTxt || miss, false),
       fb ? item("Feedback" + (lv ? " (" + esc(lv.lv.split(" — ")[0]) + ")" : "") + ":", "strength " + q(fb.strength) + " · question " + q(fb.question) + (txt(s9.change) ? ' · we will change: “' + esc(txt(s9.change)) + '”' : ""), false) : "",
       item("In E12 I will…", q(s9.e12), false)

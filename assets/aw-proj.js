@@ -8,7 +8,7 @@
   const NST = C.stations || 11;
   let ST = {}, PAIRS = {}, QS = {}, VOTES = {}, METER = {}, HOMEWORK = {}, HWCFG = {}, FB = {}, EVENTS = {}, SLOG = {}, SEST = {};
   let builtKey = null, upd = null, aqNow = null, aqUid = null;
-  const photoSrc = {};
+  const photoSrc = {}, PL = "ABCDEF";
   const rev = k => !!(ST.reveal && ST.reveal[k]);
   const pairsL = () => E.pairs(PAIRS);
 
@@ -49,6 +49,41 @@
   }
   const votes = n => n + (n === 1 ? " vote" : " votes");
   const wall = () => Object.keys(QS).map(k => QS[k]).filter(q => q && q.ok === true).sort((a, b) => a.at - b.at);
+  /* the Wonder Wall shows every question in full: the text shrinks to fit its box; if the questions still do
+     not fit at a readable size, the wall shows a page at a time and turns the page every 8 seconds. */
+  const WALLS = {};
+  function wallFit(box, items, o) {
+    if (!box) return;
+    o = o || {};
+    const W = WALLS[box.id] = WALLS[box.id] || { key: "", pages: [], page: 0, timer: null };
+    const key = JSON.stringify([items, box.clientWidth, box.clientHeight, o.max, o.min]);
+    if (W.key === key) return;
+    clearInterval(W.timer); W.timer = null; W.pages = []; W.page = 0;
+    const pager = t => { if (o.pager) o.pager(t); };
+    const render = list => { box.innerHTML = list.map(x => '<div' + (x.cls ? ' class="' + x.cls + '"' : '') + '>' + esc(x.t) + '</div>').join(""); };
+    if (!items.length) { W.key = key; box.style.fontSize = ""; box.innerHTML = o.empty || ""; pager(""); return; }
+    if (box.clientHeight < 24 || box.clientWidth < 40) { render(items); box.style.fontSize = ""; pager(""); return; }   /* not laid out yet: next time */
+    W.key = key;
+    const fits = () => box.scrollHeight <= box.clientHeight + 1;
+    const MAX = o.max || 1, MIN = o.min || 0.72;
+    render(items);
+    for (let f = MAX; f >= MIN - 1e-6; f -= 0.04) { box.style.fontSize = f.toFixed(2) + "em"; if (fits()) { pager(""); return; } }
+    /* pages at a readable size */
+    box.style.fontSize = (o.page || MIN).toFixed(2) + "em";
+    let rest = items.slice();
+    while (rest.length) {
+      render(rest);
+      const top = box.getBoundingClientRect().top, lim = top + box.clientHeight + 1;
+      let n = Array.from(box.children).findIndex(k => k.getBoundingClientRect().bottom > lim);
+      if (n < 0) n = rest.length; if (n < 1) n = 1;
+      W.pages.push(rest.slice(0, n)); rest = rest.slice(n);
+    }
+    const show = () => { render(W.pages[W.page]); pager("page " + (W.page + 1) + " of " + W.pages.length); };
+    show();
+    W.timer = setInterval(() => { W.page = (W.page + 1) % W.pages.length; show(); }, 8000);
+  }
+  const wallItems = qs => qs.map(q => ({ t: q.text, cls: q.sharp ? "sharp" : "" }));
+  window.addEventListener("resize", () => { Object.keys(WALLS).forEach(k => { WALLS[k].key = "~"; }); later("stage", () => { paintStage(); paintWallBig(); }, 200); });
   const answered = (n, f) => pairsL().filter(p => f(((p.a || {})["s" + n]) || {})).length;
 
   /* ───────── the stage for each moment ───────── */
@@ -73,17 +108,20 @@
         const g = HW.guessScore(HOMEWORK);
         $("#gs").innerHTML = rev("guess") ? '<div class="pbig">' + g.pct + '%<small>Our class guessed right ' + g.right + ' times out of ' + g.total + ' — by looking at the sky.</small></div>'
           : '<div class="pbig">?<small>Every day you guessed <b>before</b> you checked. ' + g.total + ' guesses from our class.</small></div>';
-        const qs = Object.keys(QS).map(k => QS[k]).filter(q => q.ok === true).sort((a, b) => b.at - a.at);
-        $("#wwn").textContent = qs.length ? qs.length + " questions" : "";
-        $("#ww").innerHTML = qs.length ? qs.slice(0, 6).map(q => '<div>' + esc(q.text) + '</div>').join("") : '<p class="pnote" style="margin:0">Your questions appear here.</p>';
+        const qs = wall(), wn = $("#wwn");
+        wallFit($("#ww"), wallItems(qs), { empty: '<p class="pnote" style="margin:0">Your questions appear here.</p>', pager: t => { wn.textContent = qs.length ? qs.length + (qs.length === 1 ? " question" : " questions") + (t ? " · " + t : "") : ""; } });
+        if (!qs.length) wn.textContent = "";
         const rc = $("#rc"), ph = ST.photos || [], pk = JSON.stringify(ph);
         if (rc.dataset.key !== pk) {
           rc.dataset.key = pk;
           if (!ph.length) rc.innerHTML = '<h3>Your question <small>post it on your laptop</small></h3><ol class="pgoals">' + D.starters.map(s => '<li>' + esc(s) + '</li>').join("") + '</ol>';
           else {
-            rc.innerHTML = '<h3>Which sky had the worst air? <small>vote A, B or C on your laptop</small></h3><div class="pphotos">' + ph.map((p, i) => '<figure><div class="im" id="pim' + i + '">loading…</div><figcaption><span class="L">' + "ABC"[i] + '</span><span class="vt" id="pvt' + i + '"></span><span class="aq" id="paq' + i + '"></span></figcaption></figure>').join("") + '</div>';
+            /* up to six photos: one row of three (or fewer), two rows for four to six */
+            const n = ph.length, cols = n === 4 ? 2 : Math.min(3, Math.max(n, 3)), rows = Math.ceil(n / cols);
+            const hint = n === 1 ? "vote on your laptop" : n === 2 ? "vote A or B on your laptop" : n === 3 ? "vote A, B or C on your laptop" : "vote A–" + PL[n - 1] + " on your laptop";
+            rc.innerHTML = '<h3>Which sky had the worst air? <small>' + hint + '</small></h3><div class="pphotos' + (rows > 1 ? ' two' : '') + '" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr));grid-template-rows:repeat(' + rows + ',minmax(0,1fr))">' + ph.map((p, i) => '<figure><div class="im" id="pim' + i + '">loading…</div><figcaption><span class="L">' + PL[i] + '</span><span class="vt" id="pvt' + i + '"></span><span class="aq" id="paq' + i + '"></span></figcaption></figure>').join("") + '</div>';
             ph.forEach((p, i) => {
-              const k = p.code + "_" + p.day, put = src => { const d = $("#pim" + i); if (d) d.innerHTML = src ? '<img alt="Sky photo ' + "ABC"[i] + '" src="' + src + '">' : "photo missing"; };
+              const k = p.code + "_" + p.day, put = src => { const d = $("#pim" + i); if (d) d.innerHTML = src ? '<img alt="Sky photo ' + PL[i] + '" src="' + src + '">' : "photo missing"; };
               if (photoSrc[k] !== undefined) put(photoSrc[k]); else LS.getPhoto(p.code, p.day).then(v => { photoSrc[k] = v && v.d ? v.d : null; put(photoSrc[k]); });
             });
           }
@@ -92,7 +130,7 @@
           const vs = VOTES.photo || {}, ids = new Set(pairsL().map(p => p.pid)), c = {};
           Object.keys(vs).forEach(pid => { if (ids.has(pid)) c[vs[pid]] = (c[vs[pid]] || 0) + 1; });
           ph.forEach((p, i) => {
-            const L1 = "ABC"[i], aq = HW.photoAqi(HOMEWORK, p.code, p.day), cat = CAT(aq);
+            const L1 = PL[i], aq = HW.photoAqi(HOMEWORK, p.code, p.day), cat = CAT(aq);
             const v = $("#pvt" + i), a = $("#paq" + i);
             if (v) v.textContent = votes(c[L1] || 0);
             if (a) a.innerHTML = rev("photos") && aq != null ? U.catChip(aq) + " <small>" + esc(cat ? cat.en : "") + "</small>" : "";
@@ -185,11 +223,11 @@
 
     s7(stg) {
       stg.innerHTML = '<div class="pgrid2" style="grid-template-columns:2.2fr 1fr"><div class="pcard"><h3>Say it without Hanoi <small id="rn"></small></h3><div id="gv"></div></div>' +
-        '<div class="pcard"><h3>Wonder Wall</h3><p class="pwq">' + esc(D.wonder.q) + '</p><div class="pwall one" id="ww7"></div></div></div>';
+        '<div class="pcard"><h3>Wonder Wall <small id="ww7n"></small></h3><p class="pwq">' + esc(D.wonder.q) + '</p><div class="pwall one" id="ww7"></div></div></div>';
       return () => {
-        const qs = wall(), wk = JSON.stringify(qs.map(q => q.text));
-        const w7 = $("#ww7");
-        if (w7.dataset.key !== wk) { w7.dataset.key = wk; w7.innerHTML = qs.length ? qs.slice(-6).map(q => '<div>' + esc(q.text) + '</div>').join("") : '<p class="pnote" style="margin:0">No questions on the wall yet.</p>'; }
+        const qs = wall(), w7n = $("#ww7n");
+        wallFit($("#ww7"), wallItems(qs), { empty: '<p class="pnote" style="margin:0">No questions on the wall yet.</p>', pager: t => { w7n.textContent = qs.length ? qs.length + (qs.length === 1 ? " question" : " questions") + (t ? " · " + t : "") : ""; } });
+        if (!qs.length) w7n.textContent = "";
         const L = pairsL(), sent = answered(7, a => a.submitted);
         $("#rn").textContent = sent + " of " + L.length + " pairs have sent a rule";
         const gv = $("#gv"), rv = ST.ruleVote;
@@ -225,7 +263,7 @@
     },
 
     s9(stg) {
-      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>' + esc(D.vote.q) + '</h3><div id="sh"></div><div id="ww9" style="margin-top:auto"></div><p class="pnote" id="nx" style="margin:.4em 0 0"></p></div><div class="pcard"><h3>Our 3 goals</h3><div id="gl"></div></div></div>';
+      stg.innerHTML = '<div class="pgrid2"><div class="pcard"><h3>' + esc(D.vote.q) + '</h3><div id="sh"></div><div id="ww9"><p class="pwq" style="font-size:.9em;margin:.6em 0 .2em">Wonder Wall: ' + esc(D.wonder.q) + '</p><div class="pwall one ww9" id="ww9w"></div><p class="pnote" id="ww9n" style="margin:.2em 0 0"></p></div><p class="pnote" id="nx" style="margin:.4em 0 0"></p></div><div class="pcard"><h3>Our 3 goals</h3><div id="gl"></div></div></div>';
       return () => {
         const L = pairsL(), sh = E.shift(PAIRS);
         const tot = o => Math.max(1, Object.values(o).reduce((s, v) => s + v, 0));
@@ -248,11 +286,10 @@
           const mem = k => '<span><span class="gtag g-' + k + '">' + (k === "sci" ? "Science" : "Thinking") + '</span> from memory: <b>' + got(k) + '</b> of ' + L.length + ' pairs got it</span>';
           $("#gl").innerHTML = '<div class="pmem">' + mem("sci") + mem("think") + '</div><ul class="pgoals rated labelled">' + rows + '</ul>';
         } else $("#gl").innerHTML = '<p class="pq" style="font-size:1.4em">From memory first — do not look!</p><p style="margin:0 0 .4em">Write our <span class="gtag g-sci">Science</span> goal and our <span class="gtag g-think">Thinking</span> goal on your laptop.</p><p class="pnote">' + typed + ' of ' + L.length + ' pairs have checked their answers.</p>';
-        const sharp = Object.keys(QS).filter(k => QS[k] && QS[k].sharp).length, sw = wall().filter(q => q.sharp);
-        const h9 = '<p class="pwq" style="font-size:.9em;margin:.6em 0 .2em">Wonder Wall: ' + esc(D.wonder.q) + '</p>' +
-          (sw.length ? '<div class="pwall one ww9">' + sw.slice(-3).map(q => '<div>' + esc(q.text) + '</div>').join("") + '</div>' : '') +
-          '<p class="pnote" style="margin:.2em 0 0">' + wall().length + ' questions on the wall · ' + sharp + ' sharper ' + (sharp === 1 ? "question" : "questions") + ' posted for E12</p>';
-        const w9 = $("#ww9"); if (w9.dataset.h !== h9) { w9.dataset.h = h9; w9.innerHTML = h9; }
+        const sharp = Object.keys(QS).filter(k => QS[k] && QS[k].sharp).length, sw = wall().filter(q => q.sharp), base = wall().length + ' questions on the wall · ' + sharp + ' sharper ' + (sharp === 1 ? "question" : "questions") + ' posted for E12';
+        $("#ww9w").hidden = !sw.length;
+        wallFit($("#ww9w"), wallItems(sw), { max: 0.9, min: 0.66, pager: t => { $("#ww9n").textContent = base + (t ? " · " + t : ""); } });
+        if (!sw.length || !$("#ww9n").textContent) $("#ww9n").textContent = base;
         $("#nx").textContent = D.reflect.next;
       };
     }
@@ -293,11 +330,11 @@
     const sp = ST.spot, box = $("#spot");
     if (!sp || !sp.text) { box.hidden = true; box.dataset.at = ""; return; }
     if (box.dataset.at === String(sp.at)) return; box.dataset.at = String(sp.at);
-    box.innerHTML = '<div><div class="k">★ ' + esc(sp.kind || "Spotlight") + '</div><div class="tx">' + esc(sp.text) + '</div><div class="by">Station ' + esc(sp.st) + (sp.names ? " · " + esc(sp.names) : "") + '</div></div>';
+    box.innerHTML = '<div' + (sp.q ? ' class="ch"' : '') + '><div class="k">★ ' + esc(sp.kind || "Spotlight") + '</div>' + (sp.q ? '<div class="q">' + esc(sp.q) + '</div>' : '') + '<div class="tx">' + esc(sp.text) + '</div><div class="by">Station ' + esc(sp.st) + (sp.names ? " · " + esc(sp.names) : "") + '</div></div>';
     box.hidden = false;
   }
   $("#spot").addEventListener("click", () => { $("#spot").hidden = true; });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") $("#spot").hidden = true; });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { $("#spot").hidden = true; const w = document.getElementById("pwallbig"); if (w && !w.hidden) { wbShut = String(ST.wallBig); w.hidden = true; } } });
 
   /* ───────── a presentation remote pointed at this window ─────────
      Page Down / Page Up / Tab / B (or .) are passed to the teacher's window, which does the work.
@@ -336,11 +373,31 @@
   }
   const queued = {};
   function later(name, fn, ms) { if (queued[name]) return; queued[name] = setTimeout(() => { queued[name] = null; try { fn(); } catch (e) { console.error(e); } }, ms || 150); }
-  const all = () => { document.body.classList.toggle("blank", !!ST.blank); paintTop(); paintStage(); paintBot(); paintSpot(); fitCam(); };
+  const all = () => { document.body.classList.toggle("blank", !!ST.blank); paintTop(); paintStage(); paintBot(); paintSpot(); fitCam(); paintWallBig(); };
+  /* the whole Wonder Wall, full screen (teacher: Show on the projector → Show the whole Wonder Wall) */
+  const wbEl = document.createElement("div"); wbEl.id = "pwallbig"; wbEl.hidden = true;
+  wbEl.innerHTML = '<div class="wbhead"><b>Wonder Wall</b><span class="wbq"></span><span class="wbn"></span></div><div class="pwall" id="wbWall"></div>';
+  document.body.appendChild(wbEl);
+  let wbShut = "";
+  function paintWallBig() {
+    const on = !!ST.wallBig && !!ST.startedAt && ST.live !== false && wbShut !== String(ST.wallBig);
+    wbEl.hidden = !on;
+    if (!on) return;
+    fitCam();
+    const qs = wall(), n = wbEl.querySelector(".wbn");
+    wbEl.querySelector(".wbq").textContent = (ST.screen || 1) === 7 ? D.wonder.q : "Questions from our class";
+    wallFit($("#wbWall"), wallItems(qs), { max: 1.9, min: 1.0, page: 1.0, empty: '<p class="pnote">No questions on the wall yet.</p>', pager: t => { n.textContent = qs.length + (qs.length === 1 ? " question" : " questions") + (t ? " · " + t : ""); } });
+    if (!qs.length) n.textContent = "";
+  }
+  wbEl.addEventListener("click", () => { wbShut = String(ST.wallBig); wbEl.hidden = true; });
   /* the live camera from the teacher's phone: over the stage, between the top bar and the bottom line */
   const camEl = document.createElement("div"); camEl.id = "pcam"; document.body.appendChild(camEl);
   if (window.AWCAM) AWCAM.mount({ el: camEl, kind: "proj", direct: true });
-  function fitCam() { const t = $("#ptop"), b = $("#pbot"); camEl.style.top = (t ? t.offsetHeight : 0) + "px"; camEl.style.bottom = (b ? b.offsetHeight : 0) + "px"; }
+  function fitCam() {
+    const t = $("#ptop"), b = $("#pbot"), top = (t ? t.offsetHeight : 0) + "px", bot = (b ? b.offsetHeight : 0) + "px";
+    camEl.style.top = top; camEl.style.bottom = bot;
+    const w = document.getElementById("pwallbig"); if (w) { w.style.top = top; w.style.bottom = bot; }
+  }
   window.addEventListener("resize", fitCam);
 
   /* the class station's live number, every 10 minutes */
@@ -356,7 +413,7 @@
   LS.watchState(s => { ST = s || {}; all(); });
   LS.watchEvents(v => { EVENTS = v || {}; later("goalbar", paintGoalBar, 300); });
   LS.watchPairs(v => { PAIRS = v || {}; later("stage", paintStage, 250); later("bot", paintBot, 300); later("goalbar", paintGoalBar, 800); });
-  LS.watchQuestions(v => { QS = v || {}; later("stage", paintStage, 200); });
+  LS.watchQuestions(v => { QS = v || {}; later("stage", () => { paintStage(); paintWallBig(); }, 200); });
   LS.watchVotes(v => { VOTES = v || {}; later("stage", paintStage, 200); });
   LS.watchMeter(v => { METER = v || {}; later("stage", paintStage, 100); });
   LS.watchFeedback(v => { FB = v || {}; later("stage", paintStage, 300); });

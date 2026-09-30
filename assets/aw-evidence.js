@@ -96,7 +96,10 @@
       }
       case 2:
         if (a.photoVote) out.push("Photo vote: " + e(a.photoVote));
-        if (a.qPosted) out.push("Asked: " + q(a.q)); else if (t(a.q)) out.push("<i>drafting:</i> " + q(a.q));
+        { const qs = arr(a.qs).filter(x => x && t(x.t));
+          if (qs.length) out.push("Asked" + (qs.length > 1 ? " (" + qs.length + ")" : "") + ": " + qs.map(x => q(x.t)).join(" · "));
+          else if (a.qPosted && t(a.q)) out.push("Asked: " + q(a.q));
+          if (t(a.q) && (qs.length || !a.qPosted)) out.push("<i>drafting:</i> " + q(a.q)); }
         break;
       case 3:
         if (a.p1) out.push("Clean? " + e(label(D.jar.predict1.opts, a.p1)));

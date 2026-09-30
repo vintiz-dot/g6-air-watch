@@ -132,6 +132,7 @@
     addQuestion: (pid, q) => pushTo(() => L("questions"), Object.assign({ pid, at: LS.now() }, q), "posting your question"),
     watchQuestions: fn => on(() => L("questions"), fn, {}),
     flagQuestion: (qid, v) => set(() => L("questions/" + qid + "/ok"), v, "moderating"),
+    removeQuestion: qid => set(() => L("questions/" + qid), null, "taking the question back"),
     addSuggestion: (pid, text) => pushTo(() => L("suggestions"), { pid, text, at: LS.now(), status: "new" }, "sending your idea"),
     watchSuggestions: fn => on(() => L("suggestions"), fn, {}),
     setSuggestion: (sid, status) => set(() => L("suggestions/" + sid + "/status"), status, "answering the idea"),
@@ -322,5 +323,12 @@
     }
   };
 
-  window.AWL = { U, LS, HW, CH, PLAN };
+  /* live video through VDO.Ninja (free, no account): the phone sends one stream to VDO.Ninja's relay
+     (Meshcast); every screen plays it. The stream id is made from the room's camera key (new each session). */
+  const NINJA = {
+    sid: key => "aw" + String(key || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 24),
+    view: key => "https://vdo.ninja/?view=" + NINJA.sid(key) + "&cleanoutput&transparent&noaudio",
+    push: key => "https://vdo.ninja/?push=" + NINJA.sid(key) + "&meshcast&webcam&facing=rear&autostart&quality=1&maxframerate=30&audiodevice=0&label=" + encodeURIComponent("Jar test")
+  };
+  window.AWL = { U, LS, HW, CH, PLAN, NINJA };
 })();

@@ -357,8 +357,8 @@
       const game = el("div", "task", '<h3>Which sky had the worst air?</h3><p class="vn">These are photos from our class this week. Vote first — then your teacher shows the numbers.</p><div class="pgame" id="pgame"></div>');
       box.appendChild(game);
       const hq = P.codes.map((c, i) => ({ nm: P.names[i], q: c && HOMEWORK[c] && HOMEWORK[c].q ? txt(HOMEWORK[c].q.t) : "", st: c && HOMEWORK[c] && HOMEWORK[c].q ? HOMEWORK[c].q.st : "" })).filter(x => x.q.length >= 4);
-      const q = el("div", "task", '<h3>Your question</h3>' + (hq.length ? '<p class="vn">You wrote these at home. Choose one, then make it better together — or write a new one.</p><div class="hwq" id="hwq"></div><p class="vn" style="margin-top:8px">Question starters:</p>' : '<p class="vn">Write one question you have now. Start with one of these:</p>') +
-        '<div id="starters"></div><textarea id="qtxt" rows="2" maxlength="200" placeholder="Our question…"></textarea><div class="btns"><button class="btn" id="qpost">Post our question</button></div><div id="qdone" class="vn"></div>');
+      const q = el("div", "task", '<h3>Your questions <small class="qcount" id="qcount"></small></h3>' + (hq.length ? '<p class="vn">You wrote these at home. Choose one, then make it better together — or write a new one. You can post up to ' + QMAX + ' questions.</p><div class="hwq" id="hwq"></div>' : '<p class="vn">Write a question you have now — you can post up to ' + QMAX + '.</p>') +
+        '<div id="qmine"></div><div id="qnew"><p class="vn" style="margin-top:8px">Question starters:</p><div id="starters"></div><textarea id="qtxt" rows="2" maxlength="200" placeholder="Our question…"></textarea><div class="btns"><button class="btn" id="qpost" type="button">Post our question</button></div></div><div id="qdone" class="vn"></div>');
       box.appendChild(q);
       hq.forEach(x => {
         const b = el("button", "chip wide" + (a.q === x.q ? " on" : ""), '<b>' + esc(x.nm) + ':</b> ' + esc(x.q)); b.type = "button";
@@ -368,11 +368,25 @@
       q.querySelector("#starters").appendChild(chips(D.starters.map(s => [s, s]), a.qStarter, k => { a.qStarter = k; const t = $("#qtxt"); if (!txt(t.value)) { t.value = k.replace("…", " "); a.q = t.value; } t.focus(); saveAns(n); }));
       const qt = $("#qtxt"); qt.value = a.q || ""; qt.oninput = () => { a.q = qt.value; saveAns(n); };
       $("#qpost").onclick = () => {
-        if (txt(a.q).length < 8) { $("#qdone").textContent = "Write a full question first."; return; }
-        LS.addQuestion(P.pid, { text: txt(a.q), starter: a.qStarter || "" }).then(() => { a.qPosted = (a.qPosted || 0) + 1; saveAns(n, true); $("#qdone").textContent = "Posted ✓ — your teacher may show it on the board."; });
-        if (!LS.available()) { a.qPosted = 1; saveAns(n); $("#qdone").textContent = "Saved on this laptop."; }
+        const t = txt(a.q), mine = myQs(), btn = $("#qpost");
+        if (t.length < 8) { $("#qdone").textContent = "Write a full question first."; return; }
+        if (mine.length >= QMAX) { paintMyQs(); return; }
+        if (mine.some(x => x.t.toLowerCase() === t.toLowerCase())) { $("#qdone").textContent = "You posted this one already — write a different question."; return; }
+        btn.disabled = true;
+        const add = (id, msg) => {
+          const list = myQs(); list.push({ id: id || null, t, at: LS.now() });
+          a.qs = list; a.qPosted = list.length; a.q = ""; a.qStarter = "";
+          const qt2 = $("#qtxt"); if (qt2) qt2.value = "";
+          q.querySelectorAll("#hwq .chip, #starters .chip").forEach(y => y.classList.remove("on"));
+          saveAns(n, true); btn.disabled = false; paintMyQs(msg);
+        };
+        if (!LS.available()) { add(null, "Saved on this laptop."); return; }
+        LS.addQuestion(P.pid, { text: t, starter: a.qStarter || "" }).then(id => {
+          if (id) add(id);
+          else { btn.disabled = false; $("#qdone").textContent = "Not posted — check the Wi-Fi, then press again."; }
+        });
       };
-      if (a.qPosted) $("#qdone").textContent = "Posted ✓";
+      paintMyQs();
       box.appendChild(el("div", "invite", '<b>Your idea counts.</b> ' + esc(D.invite)));
       paint2();
       box.appendChild(doneBar(n));
@@ -692,6 +706,30 @@
   function goalsCard() { return el("div", "goals", '<b>Our 3 goals today</b><ul class="glist">' + D.goals.map(g => '<li><span class="gtag g-' + g.k + '">' + esc(g.short) + '</span> ' + esc(g.text) + '</li>').join("") + '</ul>'); }
 
   /* ───────── live sub-panels ───────── */
+  /* screen 2: each pair posts up to three questions; one can be taken back until the teacher puts it up */
+  const QMAX = 3;
+  const myQs = () => E_arr(A(2).qs).filter(x => x && txt(x.t)).map(x => ({ id: x.id || null, t: txt(x.t), at: x.at || 0 }));
+  function paintMyQs(msg) {
+    const box = $("#qmine"); if (!box) return;
+    const list = myQs(), full = list.length >= QMAX;
+    const c = $("#qcount"); if (c) c.textContent = list.length ? list.length + " of " + QMAX + " posted" : "";
+    box.innerHTML = list.length ? '<ol class="myqs">' + list.map((x, i) => {
+      const w = x.id ? QS[x.id] : null, up = !!(w && w.ok === true);
+      return '<li><span>' + esc(x.t) + '</span>' + (up ? '<b class="qon">on the wall ✓</b>' : '<button type="button" class="btn ghost sm" data-i="' + i + '">Take back</button>') + '</li>';
+    }).join("") + '</ol>' : "";
+    box.querySelectorAll("button[data-i]").forEach(b => { b.onclick = () => takeBack(+b.dataset.i); });
+    const nw = $("#qnew"); if (nw) nw.hidden = full;
+    const d = $("#qdone");
+    if (d) d.textContent = msg || (full ? "You have posted " + QMAX + " questions — the most for one pair. Take one back to post a different one." : list.length ? "Posted ✓ — your teacher may put it on the Wonder Wall. You can post " + (QMAX - list.length) + " more." : "");
+  }
+  function takeBack(i) {
+    const a = A(2), list = myQs(), x = list[i]; if (!x) return;
+    if (x.id && QS[x.id] && QS[x.id].ok === true) { paintMyQs(); return; }   /* on the wall: it stays */
+    list.splice(i, 1); a.qs = list; a.qPosted = list.length;
+    if (x.id) LS.removeQuestion(x.id);
+    const t = $("#qtxt"); if (t && !txt(t.value)) { t.value = x.t; a.q = x.t; }   /* back in the box, to make it better */
+    saveAns(2, true); paintMyQs("Taken back — it is in the box again if you want to change it.");
+  }
   function paint2() {
     const g = $("#gscore"); if (!g) return;
     const s = HW.guessScore(HOMEWORK);
@@ -702,8 +740,9 @@
     const a = A(2);
     if (pg.dataset.key !== JSON.stringify(photos)) {
       pg.dataset.key = JSON.stringify(photos); pg.innerHTML = "";
+      pg.style.gridTemplateColumns = photos.length === 4 ? "repeat(2,1fr)" : "";
       photos.forEach((p, i) => {
-        const L = "ABC"[i];
+        const L = "ABCDEF"[i];
         const f = el("figure", "", '<div class="ph" id="ph' + i + '">loading…</div><figcaption><button class="chip' + (a.photoVote === L ? " on" : "") + '" type="button">' + L + '</button><span class="phaqi" id="phq' + i + '"></span></figcaption>');
         f.querySelector("button").onclick = () => { a.photoVote = L; saveAns(2, true); LS.vote(P.pid, "photo", L); pg.querySelectorAll("figcaption .chip").forEach(x => x.classList.toggle("on", x.textContent === L)); };
         pg.appendChild(f);
@@ -873,7 +912,7 @@
     if (!qs.length) { box.innerHTML = '<p class="vn">No questions on the wall yet — your teacher puts them up from screen 2.</p>'; return; }
     box.innerHTML = "";
     const list = el("div", "chips");
-    qs.slice(-10).forEach(q => {
+    qs.forEach(q => {
       const b = el("button", "chip wide" + (a.wwNow === q.id ? " on" : ""), esc(q.text) + (a.wwNow === q.id ? '<small>we can answer this now</small>' : '')); b.type = "button";
       b.onclick = () => { a.wwNow = a.wwNow === q.id ? null : q.id; a.wwText = a.wwNow ? q.text : null; saveAns(n, true); box.dataset.key = ""; paintWall(); };
       list.appendChild(b);
@@ -977,7 +1016,7 @@
     LS.watchMeter(v => { METER = v || {}; if (screenNow() === 3) paintMeter(); });
     LS.watchVotes(v => { VOTES = v || {}; });
     LS.watchFeedback(v => { FEEDBACK = v || {}; if (screenNow() === 8) paint8(); if (screenNow() === 9) paint9(); });
-    LS.watchQuestions(v => { QS = v || {}; if (joined() && (screenNow() === 7 || screenNow() === 9)) paintWall(); });
+    LS.watchQuestions(v => { QS = v || {}; if (!joined()) return; if (screenNow() === 7 || screenNow() === 9) paintWall(); if (screenNow() === 2) paintMyQs(); });
     watchMyNudges();
     LS.watchSuggestions(v => {
       SUGG = v || {};

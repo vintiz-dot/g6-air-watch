@@ -11,7 +11,11 @@
   let ST = {}, PAIRS = {}, QS = {}, SUGG = {}, FB = {}, VOTES = {}, METER = {}, EVENTS = {}, HOMEWORK = {}, HWCFG = {}, FLAGS = {}, PRES = {};
   let connected = null, builtFor = null, sessMode = null, projWin = null;
   const TID = Math.random().toString(36).slice(2);
-  const CAM = { live: false, direct: false, frame: null }; let camDet = null, camLink = "", camBtnKey = "";
+  const PHOTO_MAX = 6, PL = "ABCDEF";   /* the photo game: up to six sky photos, A–F */
+  const CAM = { live: false, direct: false, ninja: false, frame: null }; let camDet = null, camLink = "", camBtnKey = "";
+  /* the recorder window (rec.html) tells this page how the recording is going */
+  const REC = { st: "", secs: 0, at: 0, name: "" }; let recWin = null, recBC = null;
+  try { recBC = new BroadcastChannel("aw_rec"); recBC.onmessage = e => { const d = e.data || {}; if (d.from !== "rec") return; Object.assign(REC, { st: d.st || "", secs: d.secs || 0, at: Date.now(), name: d.name || "" }); camBtnKey = ""; paintCam(); }; } catch (e) {}
   let BC = null; try { BC = new BroadcastChannel("aw_remote"); } catch (e) { BC = null; }
   let LOC = {}; try { LOC = JSON.parse(localStorage.getItem("aw_teach_local") || "{}") || {}; } catch (e) { LOC = {}; }
   const saveLoc = () => { try { localStorage.setItem("aw_teach_local", JSON.stringify(LOC)); } catch (e) {} };
@@ -214,7 +218,7 @@
     const L = E.pairs(PAIRS), jt = $("#joinedTxt");
     if (jt) jt.textContent = L.length + " of " + NST + " stations · " + L.reduce((s, p) => s + p.names.length, 0) + " students";
     const rt = $("#runTxt"); if (rt) rt.textContent = "Started at " + clock(ST.startedAt) + " · 45 minutes end at " + clock(ST.startedAt + PLAN.total * 60000) + ".";
-    const pc = $("#phCount"); if (pc) pc.textContent = (ST.photos || []).length + " of 3 chosen";
+    const pc = $("#phCount"); if (pc) pc.textContent = (ST.photos || []).length + " of " + PHOTO_MAX + " chosen";
     paintLock();
     const box = $("#setupRows"); if (!box) return;
     const hwN = HW.list(HOMEWORK).filter(x => HW.days(x).length).length, rd = HW.readings(HOMEWORK), g = HW.guessScore(HOMEWORK);
@@ -223,7 +227,7 @@
       [LS.available() && connected !== false ? "ok" : "bad", "Database", LS.available() ? (connected === false ? "reconnecting…" : "live") : "not configured — open check.html"],
       [hwN ? "ok" : "warn", "Homework", hwN + " students · " + rd + " readings · eyes right " + g.pct + "%"],
       [cs ? "ok" : "warn", "Class station", cs ? cs.name : "none chosen (time chart will be empty)"],
-      [(ST.photos || []).length ? "ok" : "warn", "Photo game", (ST.photos || []).length + " of 3 photos chosen (below)"],
+      [(ST.photos || []).length ? "ok" : "warn", "Photo game", (ST.photos || []).length + " of " + PHOTO_MAX + " photos chosen (below)"],
       [CAM.live ? "ok" : "warn", "Live camera", CAM.live ? "phone is live — you see it in Show on the projector → Live camera" : "optional: Show on the projector → Live camera → scan the QR with your phone"],
       [METER.base != null ? "ok" : "warn", "Meter", METER.base != null ? "room air " + METER.base + " µg/m³" : "type the room reading (below)"],
       [projWin && !projWin.closed ? "ok" : "warn", "Projector", projWin && !projWin.closed ? "window open — make it full screen on the projector" : "press Projector ↗ (Windows+P → Extend)"],
@@ -236,7 +240,7 @@
   function openScreen(n) {
     if (!ST.reset) return;
     const t = now();
-    LS.setState({ screen: n, screenAt: t, timerEnd: ST.startedAt && ST.live !== false ? t + scr(n).min * 60000 : null, pausedLeft: null, spot: null, blank: null, camOn: null });
+    LS.setState({ screen: n, screenAt: t, timerEnd: ST.startedAt && ST.live !== false ? t + scr(n).min * 60000 : null, pausedLeft: null, spot: null, blank: null, camOn: null, wallBig: null });
     LS.logEvent("screen", { n });
   }
   function plus1() {
@@ -288,7 +292,7 @@
     }
     if (typing) return;
     if (k === "b" || k === "B" || k === ".") { e.preventDefault(); if (!e.repeat) remote("blank"); return; }
-    if (k === "Escape") { if (ST.spot) LS.setState({ spot: null }); closePop(); return; }
+    if (k === "Escape") { if (ST.spot || ST.wallBig) LS.setState({ spot: null, wallBig: null }); closePop(); return; }
     if (!ST.startedAt || ST.live === false) return;
     if (k === "n" || k === "N") goNext();
     else if (k === "p" || k === "P") { ST.pausedLeft != null ? resume() : pause(); }
@@ -346,7 +350,7 @@
       $("#script").appendChild(li);
     });
     const ctl = $("#ctl");
-    if (n === 2) { const d = el("details", "setupbox", '<summary><b>Photo game</b> <span class="vn">' + (ST.photos || []).length + ' of 3 chosen</span></summary><div class="photobox"></div>'); d.open = !(ST.photos || []).length; ctl.appendChild(d); mountPhotos(d.querySelector(".photobox")); }
+    if (n === 2) { const d = el("details", "setupbox", '<summary><b>Photo game</b> <span class="vn">' + (ST.photos || []).length + ' of ' + PHOTO_MAX + ' chosen</span></summary><div class="photobox"></div>'); d.open = !(ST.photos || []).length; ctl.appendChild(d); mountPhotos(d.querySelector(".photobox")); }
     if (n === 7) ctl.appendChild(el("div", "", '<div id="ruleList"></div>'));
     paintSpotCtl();
     paintRunLive();
@@ -370,14 +374,14 @@
   };
   const SEQ = {
     1: [],
-    2: [["rev", "guess"], ["rev", "photos"], ["wall"], ["spot", 1], ["spot", 2]],
+    2: [["rev", "guess"], ["rev", "photos"], ["wall"], ["wallbig"], ["spot", 1], ["spot", 2]],
     3: [["rev", "pred"], ["cam"], ["rev", "size"], ["spot", 1]],
     4: [["rev", "sort"], ["spot", 1], ["rev", "q1q2"]],
     5: [["spot", 1]],
     6: [["rev", "dbq"], ["spot", 1]],
-    7: [["spot", 1], ["spot", 2], ["spot", 3], ["vote"], ["close"], ["wall"]],
+    7: [["spot", 1], ["spot", 2], ["spot", 3], ["vote"], ["close"], ["wall"], ["wallbig"]],
     8: [["rev", "q3"], ["spot", 1]],
-    9: [["rev", "shift"], ["rev", "goals"], ["wall"], ["spot", 1]]
+    9: [["rev", "shift"], ["rev", "goals"], ["wall"], ["wallbig"], ["spot", 1]]
   };
   const SPOTWHY = { 2: "a question to investigate", 3: "names the evidence: the meter’s number or the beam", 4: "names harm and amount", 5: "says what the AQI shows and hides",
     6: "a number with its source", 7: "no place name — true for any city", 8: "a reason in every part", 9: "a sharper question for E12" };
@@ -386,7 +390,7 @@
     return (has("rev") || has("vote") || has("cam") ? '<i class="m r">▶</i>' : "") + (has("wall") ? '<i class="m w">W</i>' : "") + (has("spot") ? '<i class="m s">★</i>' : "") || '<i class="m">·</i>'; };
   function seqSummary(n) {
     const q = SEQ[n] || [], parts = [], spots = q.filter(x => x[0] === "spot").length;
-    q.forEach(([k, a]) => { if (k === "rev") parts.push(REV[a][0].replace(/^(Reveal|Show) /, "").replace(/^the /, "")); if (k === "wall") parts.push("the Wonder Wall"); if (k === "vote") parts.push("the rule vote"); if (k === "cam") parts.push("the live camera"); });
+    q.forEach(([k, a]) => { if (k === "rev") parts.push(REV[a][0].replace(/^(Reveal|Show) /, "").replace(/^the /, "")); if (k === "wall") parts.push("the Wonder Wall"); if (k === "vote") parts.push("the rule vote"); if (k === "cam") parts.push("the live camera"); if (k === "wallbig") parts.push("the whole wall, full screen"); });
     if (spots) parts.push(spots === 1 ? "a spotlight" : spots + " spotlights");
     return parts.length ? parts.join(" · ") : "nothing to show";
   }
@@ -420,11 +424,13 @@
   }
   function showActions(n) {
     const out = [], cands = spotCands(n), L = E.pairs(PAIRS), N = L.length;
-    let ci = 0;
+    /* the planned spotlights go to different pairs when they can (a pair may have posted several questions) */
+    const usedK = new Set(), usedP = new Set();
+    const nextCand = () => { let j = cands.findIndex(c => !usedK.has(c.key) && !usedP.has(c.pid)); if (j < 0) j = cands.findIndex(c => !usedK.has(c.key)); if (j < 0) return null; usedK.add(cands[j].key); usedP.add(cands[j].pid); return cands[j]; };
     (SEQ[n] || []).forEach(([kind, arg]) => {
       if (kind === "rev") {
         const on = !!(ST.reveal && ST.reveal[arg]), [label, sub] = REV[arg];
-        if (arg === "photos" && !(ST.photos || []).length) { out.push({ kind, rev: arg, label, sub: "No photos chosen — choose three in the run sheet below", state: "skip" }); return; }
+        if (arg === "photos" && !(ST.photos || []).length) { out.push({ kind, rev: arg, label, sub: "No photos chosen — choose up to six in the run sheet below", state: "skip" }); return; }
         out.push({ kind, rev: arg, label, sub: on ? "On the projector now — click to hide it again" : sub, state: on ? "done" : "ready", run: () => reveal(arg, true), click: () => reveal(arg, !on) });
         return;
       }
@@ -442,7 +448,7 @@
         const done = spottedOn(n);
         if (done.length >= arg) { const d = done[arg - 1]; out.push({ kind, label: "★ Spotlight — station " + d.st, sub: "“" + d.text + "”", state: "done" }); return; }
         if (n === 7 && ST.ruleVote && ST.ruleVote.items) { out.push({ kind, label: "★ Spotlight", sub: "Skipped — the vote has started", state: "skip" }); return; }
-        const c = cands[ci++];
+        const c = nextCand();
         if (!c) { out.push({ kind, label: "★ Spotlight", sub: "Waiting for a pair’s answer on this screen", state: "wait" }); return; }
         out.push({ kind, cand: c, spot: true, label: "★ Spotlight station " + c.st + (c.why ? " — " + c.why : ""), sub: "“" + c.text + "”", state: "ready", run: () => spotCand(c) });
         return;
@@ -455,10 +461,17 @@
         out.push({ kind, label: "Put " + (picks.length === 1 ? "this rule" : "these " + picks.length + " rules") + " to the vote", sub: picks.map(p => "St " + p.st + ": “" + txt(((p.a || {}).s7 || {}).rule) + "”").join(" · "), state: "ready", run: () => startVote(picks) });
         return;
       }
+      if (kind === "wallbig") {
+        const on = Object.keys(QS).filter(id => QS[id] && QS[id].ok === true && txt(QS[id].text)).length;
+        if (ST.wallBig) { out.push({ kind, label: "The whole Wonder Wall is on the projector", sub: "Click (or Esc) to close it — the next step closes it too", state: "done", click: () => wallBig(false) }); return; }
+        if (!on) { out.push({ kind, label: "Show the whole Wonder Wall (full screen)", sub: "Waiting — nothing on the wall yet", state: "wait" }); return; }
+        out.push({ kind, label: "Show the whole Wonder Wall (full screen)", sub: on + (on === 1 ? " question" : " questions") + ", every one in full" + (on > 16 ? " — it turns pages by itself if they do not all fit" : ""), state: "ready", run: () => wallBig(true), click: () => wallBig(true) });
+        return;
+      }
       if (kind === "cam") {
-        if (ST.camOn) { out.push({ kind, label: "Live camera on every screen", sub: CAM.live ? "Click to hide it · the size picture (next) hides it too" : "Waiting for the phone’s pictures — is it still live?", state: "done", click: () => camShow(false) }); return; }
-        if (!CAM.live) { out.push({ kind, label: "Live camera (phone)", sub: "Phone not live — scan the QR code below with your phone, then press Start on it", state: "skip", click: () => { const d = $("#camDet"); if (d) { d.open = true; d.scrollIntoView({ block: "nearest" }); } } }); return; }
-        out.push({ kind, label: "Show the live camera on every screen", sub: "Projector, laptops and observers — the jar test from your phone", state: "ready", run: () => camShow(true), click: () => camShow(true) });
+        if (ST.camOn) { out.push({ kind, label: "Live camera on every screen", sub: CAM.live ? "Click to hide it · the size picture (next) hides it too" : "Waiting for the phone — is it still live?", state: "done", click: () => camShow(false) }); return; }
+        if (!CAM.live) { out.push({ kind, label: "Live camera (phone)", sub: "Phone not live — scan the QR code below with your phone and choose Live video", state: "skip", click: () => { const d = $("#camDet"); if (d) { d.open = true; d.scrollIntoView({ block: "nearest" }); } } }); return; }
+        out.push({ kind, label: "Show the live camera on every screen", sub: "Projector, laptops and observers — the jar test from your phone" + (CAM.ninja ? " (live video)" : ""), state: "ready", run: () => camShow(true), click: () => camShow(true) });
         return;
       }
       if (kind === "close") {
@@ -471,12 +484,29 @@
     });
     if (ST.camOn && !(SEQ[n] || []).some(x => x[0] === "cam")) out.push({ kind: "camoff", label: "Hide the live camera", sub: "It is on every screen now", state: "ready", run: () => camShow(false) });
     if (ST.spot) out.push({ kind: "clear", label: "End the spotlight", sub: "“" + (ST.spot.text || "") + "” — station " + ST.spot.st, state: "ready", run: () => LS.setState({ spot: null }) });
+    /* the challenge (extension) answers: click to spotlight — never on Tab, so the planned steps stay as they are */
+    if (D.challenge[n]) {
+      const seen = new Set(((LOC.spottedCh || {})[n] || []));
+      const ch = L.filter(p => txt(((p.a || {})["s" + n] || {}).ch)).map(p => ({ p, t: txt(p.a["s" + n].ch) })).sort((x, y) => (seen.has(x.p.pid) - seen.has(y.p.pid)) || (y.t.length - x.t.length));
+      ch.slice(0, 3).forEach(c => out.push({ kind: "ch", spot: true, label: "★ Challenge — station " + c.p.st + (seen.has(c.p.pid) ? " (shown)" : ""), sub: "“" + c.t + "”", state: "extra", click: () => spotChallenge(c.p, n) }));
+      if (ch.length > 3) out.push({ kind: "chmore", label: "+" + (ch.length - 3) + " more challenge answers", sub: "★ Challenge on each pair’s card (below)", state: "skip" });
+    }
     return out;
   }
-  function reveal(key, on) { const patch = { ["reveal/" + key]: !!on }; if (on) { patch.spot = null; patch.blank = null; if (key === "size" && ST.camOn) { patch.camOn = null; LS.logEvent("cam", { on: false, n: cur() }); } } LS.setState(patch); if (on) LS.logEvent("reveal", { what: key, n: cur() }); }
+  function reveal(key, on) { const patch = { ["reveal/" + key]: !!on }; if (on) { patch.spot = null; patch.blank = null; patch.wallBig = null; if (key === "size" && ST.camOn) { patch.camOn = null; LS.logEvent("cam", { on: false, n: cur() }); } } LS.setState(patch); if (on) LS.logEvent("reveal", { what: key, n: cur() }); }
+  /* the whole Wonder Wall, full screen on the projector */
+  function wallBig(on) {
+    LS.setState(on ? { wallBig: now(), spot: null, blank: null, camOn: null } : { wallBig: null });
+    LS.logEvent("wallbig", { on: !!on, n: cur() });
+  }
+  /* a pair's answer to the challenge card, with the challenge question above it */
+  function spotChallenge(p, n) {
+    const a = (p.a || {})["s" + n] || {}; if (!txt(a.ch)) return;
+    spotlight(Object.assign({ pid: p.pid }, p), "Challenge", txt(a.ch), null, { q: D.challenge[n], ch: true });
+  }
   /* the live camera from the teacher's phone (cam.html) */
   function camShow(on) {
-    LS.setState(on ? { camOn: true, spot: null, blank: null } : { camOn: null });
+    LS.setState(on ? { camOn: true, spot: null, blank: null, wallBig: null } : { camOn: null });
     LS.logEvent("cam", { on: !!on, n: cur() });
   }
   function spotCand(c) {
@@ -573,13 +603,15 @@
     camDet = el("details", "camdet"); camDet.id = "camDet";
     camDet.innerHTML = '<summary><b>Live camera (your phone)</b> <span class="camst"></span></summary>' +
       '<div class="phoneqr camqr"><div class="qr"></div><div class="qrhow"><ol>' +
-      '<li>Scan the square with your phone’s camera and open the link.</li>' +
-      '<li><b>Turn on the camera</b>, aim at the jar and the meter, press <b>Start</b> — it records a video on the phone too.</li>' +
+      '<li>Scan the square with your iPhone’s camera and open the link in Safari.</li>' +
+      '<li>Choose <b>Live video (VDO.Ninja)</b> and allow the camera. Hold the phone sideways, aimed at the jar and the meter — the video shows below.</li>' +
+      '<li><b>● Record on this laptop</b> → in the new window press <b>Start recording</b> → <b>Allow</b>.</li>' +
       '<li><b>Tab</b> or <b>Show on every screen</b>: projector, laptops and observers.</li></ol>' +
-      '<p class="vn camtip"><b>Smooth video on the projector:</b> connect this laptop to the phone’s hotspot. It says “direct video ✓” here when it works; if not, the screens still get pictures.</p><p class="vn qrurl"></p></div></div>' +
-      '<div class="campv"></div><div class="btns cambtns"></div>';
+      '<p class="vn camtip"><b>No video at school?</b> The school Wi-Fi may block VDO.Ninja. On the phone press Safari’s Back button and choose <b>Pictures + record on this phone</b> — every screen switches by itself.</p><p class="vn qrurl"></p></div></div>' +
+      '<div class="campv"></div><div class="btns cambtns"></div><p class="vn recline" hidden></p>';
     AWCAM.mount({ el: camDet.querySelector(".campv"), kind: "preview", title: "Preview — only you see this", direct: true,
-      onStatus: st => { const was = CAM.live; CAM.live = st.live; CAM.direct = st.direct; CAM.frame = st.frame; paintCamSt(); if (was !== st.live) { later("show", paintShow, 50); later("sess", paintSessionDyn, 100); } } });
+      onStatus: st => { const was = [CAM.live, CAM.ninja].join(); CAM.live = st.live; CAM.direct = st.direct; CAM.ninja = !!st.ninja; CAM.frame = st.frame; paintCamSt(); if (was !== [CAM.live, CAM.ninja].join()) { camBtnKey = ""; paintCam(); later("show", paintShow, 50); later("sess", paintSessionDyn, 100); } } });
+    camDet.addEventListener("toggle", () => AWCAM.refresh());
     return camDet;
   }
   function paintCam() {
@@ -591,21 +623,41 @@
       camDet.querySelector(".qr").innerHTML = link ? qrSVG(link) : "";
       camDet.querySelector(".qrurl").innerHTML = link ? 'No QR reader? Type: <b>' + esc(link.replace(/^https?:\/\//, "")) + '</b>' : "Start a session first.";
     }
-    const bk = [!!ST.camOn, CAM.live, !!key].join();
+    const recOn = REC.st === "rec" && Date.now() - REC.at < 6000;
+    const bk = [!!ST.camOn, CAM.live, CAM.ninja, !!key, REC.st, recOn].join();
     if (bk !== camBtnKey) {
       camBtnKey = bk;
       const b = camDet.querySelector(".cambtns"); b.innerHTML = "";
       const sh = el("button", "btn sm " + (ST.camOn ? "ghost" : "g"), ST.camOn ? "Hide from the screens" : "Show on every screen"); sh.type = "button";
       sh.disabled = !key || (!ST.camOn && !CAM.live); sh.title = !CAM.live && !ST.camOn ? "Start the phone first" : "";
       sh.onclick = () => camShow(!ST.camOn); b.appendChild(sh);
+      if (recOn) { const st = el("button", "btn sm recstop", "■ Stop and save the recording"); st.type = "button"; st.onclick = () => { try { recBC && recBC.postMessage({ from: "teach", cmd: "stop" }); } catch (e) {} }; b.appendChild(st); }
+      else { const rb = el("button", "btn sm ghost", "● Record on this laptop"); rb.type = "button"; rb.disabled = !key; rb.title = "Opens a window that records the live video (VDO.Ninja) and saves it in Downloads"; rb.onclick = openRecorder; b.appendChild(rb); }
+    }
+    const rl = camDet.querySelector(".recline");
+    if (rl) {
+      const t = REC.secs || 0, mm = Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0");
+      const tx = recOn ? "<b>● Recording " + mm + "</b> in the recorder window — keep that window open." : REC.st === "saved" ? "Recording saved ✓ " + esc(REC.name || "") + " — in your Downloads folder." : REC.st === "ready" ? "Recorder window open — press <b>Start recording</b> there." : "";
+      rl.hidden = !tx; rl.className = "vn recline" + (recOn ? " on" : ""); if (rl.innerHTML !== tx) rl.innerHTML = tx;
     }
     paintCamSt();
   }
+  /* the recorder: a window of its own that plays the live video and records it (rec.html) */
+  function openRecorder() {
+    const key = ST.camKey; if (!key) return;
+    const url = location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "") + "rec.html?k=" + key;
+    if (recWin && !recWin.closed) { try { recWin.focus(); return; } catch (e) {} }
+    recWin = window.open(url, "awrec", "popup,width=1280,height=820");
+    if (!recWin) recWin = window.open(url, "_blank");
+    if (!recWin) toastT("The browser blocked the recorder window — allow pop-ups for this page, then press again.", 0, true);
+    LS.logEvent("rec", { open: true, n: cur() });
+  }
+  setInterval(() => { if (REC.st === "rec") paintCam(); }, 3000);
   function paintCamSt() {
     if (!camDet) return;
     const s = camDet.querySelector(".camst"), f = CAM.frame;
-    const how = CAM.direct ? " · direct video ✓" : CAM.live ? " · pictures only" : "";
-    s.textContent = (ST.camOn ? (CAM.live ? "on every screen" : "on the screens — waiting for the phone") : CAM.live ? "phone live · only you see it" : "phone not live") + how;
+    const how = CAM.ninja ? " · live video (VDO.Ninja)" : CAM.direct ? " · direct video ✓" : CAM.live ? " · pictures only" : "";
+    s.textContent = ST.camOn ? (CAM.live ? "on every screen" : "on the screens — waiting for the phone") + how : CAM.ninja ? "phone on live video (VDO.Ninja) · only you see it" : CAM.live ? "phone live · only you see it" + how : "phone not live";
     s.className = "camst" + (ST.camOn ? " on" : CAM.live ? " ok" : "");
   }
   function paintSpotCtl() {
@@ -634,7 +686,7 @@
       const g = HW.guessScore(HOMEWORK);
       h = '<b>Guess score:</b> ' + g.pct + '% (' + g.right + ' of ' + g.total + ' days by looking)';
       const ph = ST.photos || [];
-      if (ph.length) { const c = votesFor("photo"); h += '<br><b>Photo votes</b>' + miniBars(ph.map((p, i) => { const L1 = "ABC"[i], aq = HW.photoAqi(HOMEWORK, p.code, p.day); return { label: L1 + " · AQI " + (aq == null ? "?" : aq), v: c[L1] || 0, of: N }; })); }
+      if (ph.length) { const c = votesFor("photo"); h += '<br><b>Photo votes</b>' + miniBars(ph.map((p, i) => { const L1 = PL[i], aq = HW.photoAqi(HOMEWORK, p.code, p.day); return { label: L1 + " · AQI " + (aq == null ? "?" : aq), v: c[L1] || 0, of: N }; })); }
       const asked = new Set(Object.keys(QS).map(k => QS[k].pid));
       h += '<b>Questions:</b> ' + cnt(p => asked.has(p.pid)) + ' of ' + N + ' pairs posted';
     }
@@ -683,12 +735,12 @@
     return out.sort((a, b) => (b.star - a.star) || ((b.aqi || 0) - (a.aqi || 0)));
   }
   function mountPhotos(box) {
-    box.innerHTML = '<p class="vn" style="margin:6px 0">Tap up to 3 (A, B, C). Best: a clear-looking sky with a high number next to a hazy one with a lower number. ★ = starred on the homework page.</p><div class="phpick"></div><div class="btns"><button class="btn sm ghost" type="button">Show more</button></div>';
+    box.innerHTML = '<p class="vn" style="margin:6px 0">Tap up to 6 (A–F). Best: clear-looking skies with high numbers next to hazy ones with lower numbers. ★ = starred on the homework page.</p><div class="phpick"></div><div class="btns"><button class="btn sm ghost" type="button">Show more</button></div>';
     box._limit = 9;
     box.querySelector(".btns button").onclick = () => { box._limit += 9; box.querySelector(".phpick").dataset.key = ""; paintPhotos(box); };
     paintPhotos(box);
   }
-  function paintAllPhotos() { $$(".photobox").forEach(paintPhotos); const pc = $("#phCount"); if (pc) pc.textContent = (ST.photos || []).length + " of 3 chosen"; }
+  function paintAllPhotos() { $$(".photobox").forEach(paintPhotos); const pc = $("#phCount"); if (pc) pc.textContent = (ST.photos || []).length + " of " + PHOTO_MAX + " chosen"; }
   function paintPhotos(box) {
     const grid = box.querySelector(".phpick"); if (!grid) return;
     const cands = photoCands(), sel = (ST.photos || []).map(p => p.code + "_" + p.day);
@@ -702,7 +754,7 @@
       const k = c.code + "_" + c.day, pos = sel.indexOf(k), th = thumbs[k];
       const gc = (window.AW_CATS || []).find(x => x.k === c.guess);
       const b = el("button", pos >= 0 ? "on" : "", (th && th !== "none" && th !== "loading" ? '<img alt="" src="' + th + '">' : '<div class="ph0">' + (th === "none" ? "missing" : "…") + '</div>') +
-        (pos >= 0 ? '<b class="pos">' + "ABC"[pos] + '</b>' : '') + '<span>' + (c.star ? "★ " : "") + "Day " + c.day + " " + U.catChip(c.aqi) + (gc ? "<br>looked: " + esc(gc.en) : "") + '</span>');
+        (pos >= 0 ? '<b class="pos">' + PL[pos] + '</b>' : '') + '<span>' + (c.star ? "★ " : "") + "Day " + c.day + " " + U.catChip(c.aqi) + (gc ? "<br>looked: " + esc(gc.en) : "") + '</span>');
       b.type = "button"; b.title = c.name || "";
       b.onclick = () => togglePhoto(c);
       grid.appendChild(b);
@@ -711,7 +763,7 @@
   }
   function togglePhoto(c) {
     const sel = (ST.photos || []).slice(), i = sel.findIndex(p => p.code === c.code && p.day === c.day);
-    if (i >= 0) sel.splice(i, 1); else { if (sel.length >= 3) sel.shift(); sel.push({ code: c.code, day: c.day }); }
+    if (i >= 0) sel.splice(i, 1); else { if (sel.length >= PHOTO_MAX) sel.shift(); sel.push({ code: c.code, day: c.day }); }
     LS.setState({ photos: sel.length ? sel : null, "reveal/photos": false });
     LS.clearVotes("photo");
   }
@@ -786,7 +838,7 @@
   function spotText(n, a) {
     a = a || {};
     switch (n) {
-      case 2: return txt(a.q) ? ["Our question", txt(a.q)] : null;
+      case 2: { const qs = E.arr(a.qs).filter(x => x && txt(x.t)), t = qs.length ? txt(qs[qs.length - 1].t) : txt(a.q); return t ? ["Our question", t] : null; }
       case 3: { const s = E.frameText(D.jar.frame, a.ex, 3); return s ? ["Looking is not measuring", s] : null; }
       case 4: { const s = E.frameText(D.focus.rule, a.rule, 2); return s ? ["What makes a pollutant", s] : null; }
       case 5: { const s = E.frameText(D.inv1.frame, a.fr, 2) || txt((a.place || {}).ev) || txt((a.time || {}).ev); return s ? ["What the AQI hides", s] : null; }
@@ -797,10 +849,11 @@
     }
     return null;
   }
-  function spotlight(p, kind, text, key) {
-    const names = E.arr(p.names).filter(Boolean), n = cur();
-    LS.setState({ spot: { kind, text, st: p.st, names: names.join(" & "), pid: p.pid, at: now() }, blank: null });
+  function spotlight(p, kind, text, key, o) {
+    const names = E.arr(p.names).filter(Boolean), n = cur(); o = o || {};
+    LS.setState({ spot: Object.assign({ kind, text, st: p.st, names: names.join(" & "), pid: p.pid, at: now() }, o.q ? { q: o.q } : {}), blank: null, wallBig: null });
     LS.logEvent("spot", { pid: p.pid, st: p.st, n, what: kind, text });
+    if (o.ch) { LOC.spottedCh = LOC.spottedCh || {}; const l = LOC.spottedCh[n] = LOC.spottedCh[n] || []; if (!l.includes(p.pid)) l.push(p.pid); saveLoc(); later("show", paintShow, 60); return; }
     LOC.spotted = LOC.spotted || {};
     const list = LOC.spotted[n] = LOC.spotted[n] || [], k = key || p.pid;
     if (!list.some(x => x.key === k)) list.push({ key: k, pid: p.pid, st: p.st, text: String(text || "").slice(0, 160) });
@@ -849,6 +902,7 @@
       const sp = spotText(n, a);
       const sb = el("button", "btn " + (sugg.has(p.pid) ? "sgb" : "ghost"), "★ Spotlight"); sb.type = "button"; sb.disabled = !sp; if (sp) sb.title = sp[1];
       sb.onclick = () => sp && spotlight(p, sp[0], sp[1]); acts.appendChild(sb);
+      if (D.challenge[n] && txt(a.ch)) { const cb = el("button", "btn ghost chb", "★ Challenge"); cb.type = "button"; cb.title = D.challenge[n] + " — “" + txt(a.ch) + "”"; cb.onclick = () => spotChallenge(p, n); acts.appendChild(cb); }
       if (help) { const hb = el("button", "btn g", "✓ Helped"); hb.type = "button"; hb.onclick = () => { LS.setHelp(p.pid, false); LS.logEvent("helped", { pid: p.pid, st: p.st, n }); }; acts.appendChild(hb); }
       box.appendChild(card);
     });
@@ -973,6 +1027,8 @@
       case "blank": return e.on ? "Projector blanked" : "Projector back on";
       case "lock": return e.on ? "Laptops locked (full screen + leave check)" : "Laptops unlocked";
       case "cam": return e.on ? "Live camera on every screen" : "Live camera hidden";
+      case "wallbig": return e.on ? "The whole Wonder Wall on the projector" : "Wonder Wall closed";
+      case "rec": return "Recorder window opened (live video → this laptop)";
     }
     return e.kind;
   }
